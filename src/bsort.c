@@ -62,7 +62,6 @@ int compare(int *length, unsigned char *a, unsigned char *b) {
   return memcmp(a, b, *length);
 }
 
-
 void
 radixify(unsigned char *buffer,
          const long count,
@@ -83,7 +82,7 @@ radixify(unsigned char *buffer,
   long stack[stack_size];
   long stack_pointer;
   long last_position, last_value, next_value;
-
+  
   if (verbosity && digit == 0)
     fprintf(stderr, "radixify(count=%ld, digit=%ld, char_start=%ld, char_stop=%ld, record_size=%ld, key_size=%ld, stack_size=%ld, cut_off=%ld)\n", count, digit, char_start, char_stop, record_size, key_size, stack_size, cut_off);
 
@@ -91,14 +90,15 @@ radixify(unsigned char *buffer,
     counts[x] = 0;
     offsets[x] = 0;
   }
-
+  
   // Compute starting positions
+  
   for (x=0; x<count; x++) {
     long c = buffer[x*record_size + digit];
     counts[c] += 1;
   }
-
-
+  
+  
   // Compute offsets
   offset = 0;
   for(x=char_start; x<=char_stop; x++) {
@@ -106,19 +106,20 @@ radixify(unsigned char *buffer,
     starts[x] = offsets[x];
     offset += counts[x];
   }
-
+  
   for(x=char_start; x<char_stop; x++) {
     ends[x] = offsets[x+1];
   }
   ends[char_stop] = count;
-
-  for(x=char_start; x<=char_stop; x++) {
-    while (offsets[x] < ends[x]) {
-
-      if (buffer[offsets[x] * record_size + digit] == x) {
-        offsets[x] += 1;
-      } else {
-        stack_pointer=0;
+  
+  if (digit) {
+    for(x=char_start; x<=char_stop; x++) {
+      while (offsets[x] < ends[x]) {
+        
+        if (buffer[offsets[x] * record_size + digit] == x) {
+          offsets[x] += 1;
+        } else {
+          stack_pointer=0;
         stack[stack_pointer] = offsets[x];
         stack_pointer += 1;
         target = buffer[offsets[x] * record_size + digit];
@@ -140,8 +141,8 @@ radixify(unsigned char *buffer,
         memcpy(&buffer[stack[0] * record_size], &temp, record_size);
       }
     }
-  }
-
+    }
+  
   if (digit < cut_off) {
     for(x=char_start; x<=char_stop; x++) {
       if ( ends[x] - starts[x] > SWITCH_TO_SHELL) {
@@ -167,8 +168,119 @@ radixify(unsigned char *buffer,
         //qsort_r(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, &compare, &record_size);
       }
   }
+  }
 }
 
+
+
+void
+start_radixify(unsigned char *buffer,
+         const long count,
+         unsigned char *inbuffer,
+         const long digit,
+         const long char_start,
+         const long char_stop,
+         const long record_size,
+         const long key_size,
+         const long stack_size,
+         const long cut_off) {
+  long counts[char_stop+1];
+  long offsets[char_stop+1];
+  long starts[char_stop+1];
+  long ends[char_stop+1];
+  long offset=0;
+  unsigned char temp[record_size];
+  long target, x, a, b;
+  long stack[stack_size];
+  long stack_pointer;
+  long last_position, last_value, next_value;
+  
+  if (verbosity && digit == 0)
+    fprintf(stderr, "radixify(count=%ld, digit=%ld, char_start=%ld, char_stop=%ld, record_size=%ld, key_size=%ld, stack_size=%ld, cut_off=%ld)\n", count, digit, char_start, char_stop, record_size, key_size, stack_size, cut_off);
+
+  for (x=char_start; x<=char_stop; x++) {
+    counts[x] = 0;
+    offsets[x] = 0;
+  }
+  
+  // Compute starting positions
+  
+  for (x=0; x<count; x++) {
+    long c = inbuffer[x*record_size + digit];
+    counts[c] += 1;
+  }
+  
+  // Compute offsets
+  offset = 0;
+  for(x=char_start; x<=char_stop; x++) {
+    offsets[x] = offset;
+    starts[x] = offsets[x];
+    offset += counts[x];
+  }
+  
+  for(x=char_start; x<char_stop; x++) {
+    ends[x] = offsets[x+1];
+  }
+  ends[char_stop] = count;
+  
+  if (digit) {
+    for(x=char_start; x<=char_stop; x++) {
+      while (offsets[x] < ends[x]) {
+        
+        if (inbuffer[offsets[x] * record_size + digit] == x) {
+          offsets[x] += 1;
+        } else {
+          stack_pointer=0;
+        stack[stack_pointer] = offsets[x];
+        stack_pointer += 1;
+        target = inbuffer[offsets[x] * record_size + digit];
+        while( target != x && stack_pointer < stack_size ) {
+          stack[stack_pointer] = offsets[target];
+          offsets[target] += 1;
+          target = inbuffer[stack[stack_pointer] * record_size + digit];
+          stack_pointer++;
+        };
+        if (stack_pointer != stack_size) {
+          offsets[x] += 1;
+        }
+        stack_pointer--;
+        memcpy(&temp, &inbuffer[stack[stack_pointer] * record_size], record_size);
+        while (stack_pointer) {
+          memcpy(&buffer[stack[stack_pointer] * record_size], &buffer[stack[stack_pointer-1] * record_size], record_size);
+          stack_pointer--;
+        }
+        memcpy(&buffer[stack[0] * record_size], &temp, record_size);
+      }
+    }
+    }
+  
+  if (digit < cut_off) {
+    for(x=char_start; x<=char_stop; x++) {
+      if ( ends[x] - starts[x] > SWITCH_TO_SHELL) {
+        radixify(&buffer[starts[x] * record_size],
+                 ends[x] - starts[x],
+                 digit+1,
+                 char_start,
+                 char_stop,
+                 record_size,
+                 key_size,
+                 stack_size,
+                 cut_off);
+      } else {
+        if (ends[x] - starts[x] <= 1) continue;
+        shellsort(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, key_size);
+        //qsort_r(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, &compare, &record_size);
+      }
+    }
+  } else {
+    for(x=char_start; x<=char_stop; x++)
+      if (ends[x] - starts[x] > 1) {
+        shellsort(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, key_size);
+        //qsort_r(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, &compare, &record_size);
+      }
+  }
+  }
+}
 
 int open_sort(char *path, struct sort *sort) {
   void *buffer = NULL;
@@ -232,6 +344,7 @@ main(int argc, char *argv[]) {
   int key_size=10;
   int stack_size=5;
   int cut_off = 4;
+  char *infile=0;
   verbosity = 0;
 
   while ((opt = getopt(argc, argv, "var:k:s:c:")) != -1) {
@@ -254,45 +367,54 @@ main(int argc, char *argv[]) {
       break;
     case 'c':
       cut_off = atoi(optarg);
+    case 'i':
+      infile = strdup(optarg);
     default:
       fprintf(stderr, "Invalid parameter: -%c\n", opt);
       goto failure;
     }
   }
 
-  if (optind >= argc) {
+  if (optind == argc) {
     fprintf(stderr, "Expected argument after options\n");
     goto failure;
   }
 
   unsigned long TickStart = getTick();
 
-  while(optind < argc) {
-    if (verbosity)
-      printf("sorting %s\n", argv[optind]);
-    struct sort sort;
-    if (-1==open_sort(argv[optind], &sort))
-      goto failure;
+  if (verbosity)
+    printf("sorting %s\n", argv[optind]);
+  struct sort sort;
+  if (-1==open_sort(argv[optind], &sort))
+    goto failure;
 
-    radixify(sort.buffer,
-             sort.size / record_size,
-             0,
-             char_start,
-             char_stop,
-             record_size,
-             key_size,
-             stack_size,
-             cut_off);
-    close_sort(&sort);
-    optind++;
-  }
+  struct sort insort;
+  if (-1==open_sort(infile, &insort))
+    goto failure;
+
+  if (sort.size != insort.size)
+    goto failure;
+  
+  start_radixify(sort.buffer,
+           sort.size / record_size,
+           insort.buffer,
+           0,
+           char_start,
+           char_stop,
+           record_size,
+           key_size,
+           stack_size,
+           cut_off);
+  close_sort(&sort);
+  optind++;
+  
 
   printf("Processing time: %.3f s\n", (float)(getTick() - TickStart) / 1000);
 
   exit(0);
 failure:
   fprintf(stderr,
-          "Usage: %s [-v] [-a] [-r ###] [-k ###] [-s ###] file1, file2 ... \n",
+          "Usage: %s [-v] [-a] [-r ###] [-k ###] [-s ###] -i [infile] <out>file \n",
           argv[0]);
   fprintf(stderr,
           "Individually sort binary files inplace with a radix sort\n"
@@ -304,6 +426,7 @@ failure:
           "  -r ###   size of overall record, in bytes.  (default 100)\n"
           "\n"
           "Options:\n"
+          "  -i fname input filename.  Required for competition\n"
           "  -v  verbose output logging\n"
           "\n"
           "Tuning Options:\n"
