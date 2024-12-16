@@ -9,8 +9,6 @@
 #include <unistd.h>
 
 
-#define SWITCH_TO_SHELL 20
-
 
 int verbosity;
 
@@ -63,15 +61,16 @@ int compare(int *length, unsigned char *a, unsigned char *b) {
 }
 
 void
-radixify(unsigned char *buffer,
+radixify(register unsigned char *buffer,
          const long count,
+	 unsigned char *inbuffer,
          const long digit,
          const long char_start,
          const long char_stop,
          const long record_size,
          const long key_size,
          const long stack_size,
-         const long cut_off) {
+	 const long cut_off) {
   long counts[char_stop+1];
   long offsets[char_stop+1];
   long starts[char_stop+1];
@@ -79,23 +78,32 @@ radixify(unsigned char *buffer,
   long offset=0;
   unsigned char temp[record_size];
   long target, x, a, b;
-  long stack[stack_size];
-  long stack_pointer;
+  long stack[stack_size+1];
+  long stack_pointer = 0;
   long last_position, last_value, next_value;
-  
-  if (verbosity && digit == 0)
-    fprintf(stderr, "radixify(count=%ld, digit=%ld, char_start=%ld, char_stop=%ld, record_size=%ld, key_size=%ld, stack_size=%ld, cut_off=%ld)\n", count, digit, char_start, char_stop, record_size, key_size, stack_size, cut_off);
 
+  
   for (x=char_start; x<=char_stop; x++) {
     counts[x] = 0;
     offsets[x] = 0;
   }
   
   // Compute starting positions
-  
-  for (x=0; x<count; x++) {
-    long c = buffer[x*record_size + digit];
-    counts[c] += 1;
+
+  if (digit == 0) {
+    for (x=0; x<count; x++) {
+      long c = inbuffer[x*record_size];
+      counts[c] += 1;
+      memcpy(buffer+x*record_size, inbuffer+x*record_size, record_size);
+    }
+
+    munmap(inbuffer, x * record_size);
+   
+  } else {
+    for (x=0; x<count; x++) {
+      long c = buffer[x*record_size + digit];
+      counts[c] += 1;
+    }
   }
   
   
@@ -112,175 +120,97 @@ radixify(unsigned char *buffer,
   }
   ends[char_stop] = count;
   
-  if (digit) {
-    for(x=char_start; x<=char_stop; x++) {
-      while (offsets[x] < ends[x]) {
-        
-        if (buffer[offsets[x] * record_size + digit] == x) {
-          offsets[x] += 1;
-        } else {
-          stack_pointer=0;
-        stack[stack_pointer] = offsets[x];
-        stack_pointer += 1;
-        target = buffer[offsets[x] * record_size + digit];
-        while( target != x && stack_pointer < stack_size ) {
-          stack[stack_pointer] = offsets[target];
-          offsets[target] += 1;
-          target = buffer[stack[stack_pointer] * record_size + digit];
-          stack_pointer++;
-        };
-        if (stack_pointer != stack_size) {
-          offsets[x] += 1;
-        }
-        stack_pointer--;
-        memcpy(&temp, &buffer[stack[stack_pointer] * record_size], record_size);
-        while (stack_pointer) {
-          memcpy(&buffer[stack[stack_pointer] * record_size], &buffer[stack[stack_pointer-1] * record_size], record_size);
-          stack_pointer--;
-        }
-        memcpy(&buffer[stack[0] * record_size], &temp, record_size);
-      }
-    }
-    }
-  
-  if (digit < cut_off) {
-    for(x=char_start; x<=char_stop; x++) {
-      if ( ends[x] - starts[x] > SWITCH_TO_SHELL) {
-        radixify(&buffer[starts[x] * record_size],
-                 ends[x] - starts[x],
-                 digit+1,
-                 char_start,
-                 char_stop,
-                 record_size,
-                 key_size,
-                 stack_size,
-                 cut_off);
-      } else {
-        if (ends[x] - starts[x] <= 1) continue;
-        shellsort(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, key_size);
-        //qsort_r(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, &compare, &record_size);
-      }
-    }
-  } else {
-    for(x=char_start; x<=char_stop; x++)
-      if (ends[x] - starts[x] > 1) {
-        shellsort(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, key_size);
-        //qsort_r(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, &compare, &record_size);
-      }
-  }
-  }
-}
-
-
-
-void
-start_radixify(unsigned char *buffer,
-         const long count,
-         unsigned char *inbuffer,
-         const long digit,
-         const long char_start,
-         const long char_stop,
-         const long record_size,
-         const long key_size,
-         const long stack_size,
-         const long cut_off) {
-  long counts[char_stop+1];
-  long offsets[char_stop+1];
-  long starts[char_stop+1];
-  long ends[char_stop+1];
-  long offset=0;
-  unsigned char temp[record_size];
-  long target, x, a, b;
-  long stack[stack_size];
-  long stack_pointer;
-  long last_position, last_value, next_value;
-  
-  if (verbosity && digit == 0)
-    fprintf(stderr, "radixify(count=%ld, digit=%ld, char_start=%ld, char_stop=%ld, record_size=%ld, key_size=%ld, stack_size=%ld, cut_off=%ld)\n", count, digit, char_start, char_stop, record_size, key_size, stack_size, cut_off);
-
-  for (x=char_start; x<=char_stop; x++) {
-    counts[x] = 0;
-    offsets[x] = 0;
-  }
-  
-  // Compute starting positions
-  
-  for (x=0; x<count; x++) {
-    long c = inbuffer[x*record_size + digit];
-    counts[c] += 1;
-  }
-  
-  // Compute offsets
-  offset = 0;
   for(x=char_start; x<=char_stop; x++) {
-    offsets[x] = offset;
-    starts[x] = offsets[x];
-    offset += counts[x];
-  }
-  
-  for(x=char_start; x<char_stop; x++) {
-    ends[x] = offsets[x+1];
-  }
-  ends[char_stop] = count;
-  
-  if (digit) {
-    for(x=char_start; x<=char_stop; x++) {
-      while (offsets[x] < ends[x]) {
-        
-        if (inbuffer[offsets[x] * record_size + digit] == x) {
-          offsets[x] += 1;
-        } else {
-          stack_pointer=0;
-        stack[stack_pointer] = offsets[x];
-        stack_pointer += 1;
-        target = inbuffer[offsets[x] * record_size + digit];
-        while( target != x && stack_pointer < stack_size ) {
-          stack[stack_pointer] = offsets[target];
-          offsets[target] += 1;
-          target = inbuffer[stack[stack_pointer] * record_size + digit];
-          stack_pointer++;
-        };
-        if (stack_pointer != stack_size) {
-          offsets[x] += 1;
-        }
-        stack_pointer--;
-        memcpy(&temp, &inbuffer[stack[stack_pointer] * record_size], record_size);
-        while (stack_pointer) {
-          memcpy(&buffer[stack[stack_pointer] * record_size], &buffer[stack[stack_pointer-1] * record_size], record_size);
-          stack_pointer--;
-        }
+    while (offsets[x] < ends[x]) {
+      
+      if (buffer[offsets[x] * record_size + digit] == x) {
+	offsets[x] += 1;
+      } else {
+	stack_pointer=0;
+	stack[stack_pointer] = offsets[x];
+	stack_pointer += 1;
+	target = buffer[offsets[x] * record_size + digit];
+	
+	while( target != x && stack_pointer < stack_size ) {
+	  stack[stack_pointer] = offsets[target];
+	  offsets[target] += 1;
+	  
+	  target = buffer[stack[stack_pointer] * record_size + digit];
+	  stack_pointer++;
+	};
+	if (target == x) {
+	  offsets[x] += 1;
+	}
+	stack_pointer--;
+	memcpy(&temp, &buffer[stack[stack_pointer] * record_size], record_size);
+	while (stack_pointer) {
+	  memcpy(&buffer[stack[stack_pointer] * record_size], &buffer[stack[stack_pointer-1] * record_size], record_size);
+	  stack_pointer--;
+	}
         memcpy(&buffer[stack[0] * record_size], &temp, record_size);
       }
     }
-    }
-  
-  if (digit < cut_off) {
-    for(x=char_start; x<=char_stop; x++) {
-      if ( ends[x] - starts[x] > SWITCH_TO_SHELL) {
-        radixify(&buffer[starts[x] * record_size],
-                 ends[x] - starts[x],
-                 digit+1,
-                 char_start,
-                 char_stop,
-                 record_size,
-                 key_size,
-                 stack_size,
-                 cut_off);
-      } else {
-        if (ends[x] - starts[x] <= 1) continue;
-        shellsort(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, key_size);
-        //qsort_r(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, &compare, &record_size);
-      }
-    }
-  } else {
-    for(x=char_start; x<=char_stop; x++)
-      if (ends[x] - starts[x] > 1) {
-        shellsort(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, key_size);
-        //qsort_r(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, &compare, &record_size);
-      }
   }
+  
+  for(x=char_start; x<=char_stop; x++) {
+    if ( ends[x] - starts[x] > cut_off) {
+      radixify(&buffer[starts[x] * record_size],
+	       ends[x] - starts[x],
+	       0,
+	       digit+1,
+	       char_start,
+	       char_stop,
+	       record_size,
+	       key_size,
+	       stack_size,
+	       cut_off);
+    } else {
+      if (ends[x] - starts[x] <= 1) continue;
+      shellsort(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, key_size);
+      //qsort_r(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, &compare, &record_size);
+    }
   }
 }
+
+int read_sort(char *path, struct sort *sort) {
+  void *buffer = NULL;
+
+  int fd = open(path, O_RDONLY);
+  if (fd == -1)
+    goto error;
+
+  struct stat stats;
+  if (-1 == fstat(fd, &stats))
+    goto error;
+
+  fprintf(stderr, "read_sort size: %lu\n", stats.st_size);
+
+  if (!(buffer = mmap(NULL,
+                      stats.st_size,
+                      PROT_READ,
+                      MAP_SHARED,
+                      fd,
+                      0
+                     )))
+    goto error;
+      madvise(buffer, stats.st_size, POSIX_MADV_WILLNEED | POSIX_MADV_SEQUENTIAL);
+
+  sort->buffer = buffer;
+  sort->size = stats.st_size;
+  sort->fd = fd;
+  return 0;
+  
+ error:
+  perror(path);
+  if (buffer)
+    munmap(buffer, stats.st_size);
+  if (fd != -1)
+    close(fd);
+  sort->buffer = 0;
+  sort->fd = 0;
+  return -1;
+}
+
 
 int open_sort(char *path, struct sort *sort) {
   void *buffer = NULL;
@@ -292,6 +222,9 @@ int open_sort(char *path, struct sort *sort) {
   struct stat stats;
   if (-1 == fstat(fd, &stats))
     goto error;
+  
+  fprintf(stderr, "open size: %lu\n", stats.st_size);
+  
   if (!(buffer = mmap(NULL,
                       stats.st_size,
                       PROT_READ | PROT_WRITE,
@@ -300,16 +233,14 @@ int open_sort(char *path, struct sort *sort) {
                       0
                      )))
     goto error;
-
-
-  madvise(buffer, stats.st_size, POSIX_MADV_WILLNEED | POSIX_MADV_SEQUENTIAL);
+      madvise(buffer, stats.st_size, POSIX_MADV_WILLNEED | POSIX_MADV_SEQUENTIAL);
 
   sort->buffer = buffer;
   sort->size = stats.st_size;
   sort->fd = fd;
   return 0;
-
-error:
+  
+ error:
   perror(path);
   if (buffer)
     munmap(buffer, stats.st_size);
@@ -319,6 +250,55 @@ error:
   sort->fd = 0;
   return -1;
 }
+
+
+
+int create_sort(char *path, struct sort *sort, struct sort *input) {
+  void *buffer = NULL;
+
+  int fd = open(path, O_RDWR | O_CREAT, 0644);
+  if (fd == -1)
+    goto error;
+
+  if (-1 == lseek(fd, input->size-1, SEEK_SET))
+    goto error;
+
+  if (-1 == write(fd, " ", 1))
+    goto error;
+
+  struct stat stats;
+  if (-1 == fstat(fd, &stats))
+    goto error;
+  fprintf(stderr, "create_sort %lu\n", stats.st_size);
+  
+  if (!(buffer = mmap(NULL,
+                      stats.st_size,
+                      PROT_READ | PROT_WRITE,
+                      MAP_SHARED,
+                      fd,
+                      0
+		      )))
+    goto error;
+
+  fprintf(stderr, "madvise\n");
+  madvise(buffer, stats.st_size, POSIX_MADV_WILLNEED | POSIX_MADV_SEQUENTIAL);
+
+  sort->buffer = buffer;
+  sort->size = stats.st_size;
+  sort->fd = fd;
+  fprintf(stderr, "Returning\n");
+  return 0;
+  
+ error:
+  perror(path);
+  if (buffer)
+    munmap(buffer, stats.st_size);
+  if (fd != -1)
+    close(fd);
+  sort->buffer = 0;
+  sort->fd = 0;
+  return -1;
+  }
 
 
 void close_sort(struct sort *sort) {
@@ -343,11 +323,11 @@ main(int argc, char *argv[]) {
   int record_size=100;
   int key_size=10;
   int stack_size=5;
-  int cut_off = 4;
+  int cut_off = 3000;
   char *infile=0;
   verbosity = 0;
 
-  while ((opt = getopt(argc, argv, "var:k:s:c:")) != -1) {
+  while ((opt = getopt(argc, argv, "i:var:k:s:c:")) != -1) {
     switch (opt) {
     case 'v':
       verbosity += 1;
@@ -367,8 +347,11 @@ main(int argc, char *argv[]) {
       break;
     case 'c':
       cut_off = atoi(optarg);
+      break;
     case 'i':
       infile = strdup(optarg);
+      fprintf(stderr, "input file:%s\n", optarg);
+      break;					  
     default:
       fprintf(stderr, "Invalid parameter: -%c\n", opt);
       goto failure;
@@ -385,20 +368,33 @@ main(int argc, char *argv[]) {
   if (verbosity)
     printf("sorting %s\n", argv[optind]);
   struct sort sort;
-  if (-1==open_sort(argv[optind], &sort))
-    goto failure;
-
-  struct sort insort;
-  if (-1==open_sort(infile, &insort))
-    goto failure;
-
-  if (sort.size != insort.size)
-    goto failure;
   
-  start_radixify(sort.buffer,
+  struct sort insort;
+  if (infile) {
+    if (-1==read_sort(infile, &insort)) {
+      fprintf(stderr, "Failed to open input");
+      goto failure;
+    }
+    
+    if (-1==create_sort(argv[optind], &sort, &insort)) {
+      fprintf(stderr, "Failed to create output file");
+      goto failure;
+    }
+  } else {
+    if (-1==open_sort(argv[optind], &sort)) {
+      fprintf(stderr, "Failed to open output file");
+      goto failure;
+    }
+  }
+  if (sort.size != insort.size) {
+    fprintf(stderr, "Mismatched sort sizes");
+    goto failure;
+  }
+    
+  radixify(sort.buffer,
            sort.size / record_size,
            insort.buffer,
-           0,
+	   0,
            char_start,
            char_stop,
            record_size,
@@ -432,7 +428,7 @@ failure:
           "Tuning Options:\n"
           "\n"
           "  -s ###   pushahead stack size.  (default 12)\n"
-          "  -c ###   recursion limit after which to use shell sort (defaults to 4)\n"
+          "  -c ###   buffer size after which to use shell sort (defaults to 3000)\n"
           "\n"
           "Report bsort bugs to adam@pelotoncycle.com\n"
          );
