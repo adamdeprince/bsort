@@ -1,7 +1,7 @@
 Joule sort submission
 
 
-This readme briefly describes my submission for the 2024 Indy Joulesort competition.  While implantation of a sorting algorithm, [sort](https://github.com/adamdeprince/bsort) is capable of entering the Daytona competition, it was not tested that way in preparation for this competition. 
+This readme briefly describes my submission for the 2024 Indy Joulesort competition.  While implementation of a sorting algorithm, [sort](https://github.com/adamdeprince/bsort) is capable of entering the Daytona competition, it was not tested that way in preparation for this competition. 
 
 Bsort is a unique "inverted radix sort" for which the details of operation will be explained in a future paper.  It source can be found at [bsort.c](https://github.com/adamdeprince/bsort/blob/master/src/bsort.c).  It is compiled with a C compiler as: `gcc -O3 -march=native bsort.c -o bsort` and for our sort execution we ran bsort as `./bsort -a -c 10 -s 18 -k 10 -i input output` where -s and -c are tuning parameters descried in `./bsort --help` that have a minor impact on performance. 
 
