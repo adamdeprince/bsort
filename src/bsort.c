@@ -335,7 +335,7 @@ radixify3(register unsigned char *buffer,
 
   for (x=char_start; x<=char_stop; x++) {
     for (y=char_start; y<=char_stop; y++) {
-      for (z=char_start; y<=char_stop; z++) {
+      for (z=char_start; z<=char_stop; z++) {
 	counts[x][y][z] = 0;
 	offsets[x][y][z] = 0;
     }
@@ -352,7 +352,7 @@ radixify3(register unsigned char *buffer,
       memcpy(buffer+x*record_size, inbuffer+x*record_size, record_size);
     }
     
-    munmap(inbuffer, x * record_size);
+    munmap(inbuffer, count * record_size);
     
   } else {
     for (x=0; x<count; x++) {
@@ -368,7 +368,7 @@ radixify3(register unsigned char *buffer,
     offset = 0;
     for(x=char_start; x<=char_stop; x++) {
       for(y=char_start; y<=char_stop; y++) {
-	for(z=char_start; y<=char_stop; z++) {
+	for(z=char_start; z<=char_stop; z++) {
 	  offsets[x][y][z] = offset;
 	  starts[x][y][z] = offsets[x][y][z];
 	  offset += counts[x][y][z];
@@ -379,7 +379,7 @@ radixify3(register unsigned char *buffer,
     /* FIX */
     for(x=char_start; x<=char_stop; x++) {
       for(y=char_start; y<=char_stop; y++) {
-	for(z=char_start; y<=char_stop; z++) {
+	for(z=char_start; z<=char_stop; z++) {
 	  if ((x == char_stop) && (y == char_stop) && (z==char_stop)) break;
 	  if (z == char_stop) {
 	    if (y == char_stop) {
@@ -439,8 +439,8 @@ radixify3(register unsigned char *buffer,
     }
     for(x=char_start; x<=char_stop; x++) {
       for(y=char_start; y<=char_stop; y++) {
-	for(z=char_start; z<=char_stop; y++) {
-        if ( ends[x][y][z] - starts[x][x][z] > cut_off) {
+	for(z=char_start; z<=char_stop; z++) {
+        if ( ends[x][y][z] - starts[x][y][z] > cut_off) {
           if (record_size - digit >= 6) {
             radixify2(&buffer[starts[x][y][z] * record_size],
                       ends[x][y][z] - starts[x][y][z],
@@ -692,7 +692,7 @@ main(int argc, char *argv[]) {
   }
 
   if (key_size >= 6) {
-    radixify2(outsort.buffer,
+    radixify3(outsort.buffer,
               outsort.size / record_size,
               insort.buffer,
               0,
