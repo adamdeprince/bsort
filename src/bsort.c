@@ -277,7 +277,7 @@ radixify2(register unsigned char *buffer,
   
     for(x=char_start; x<=char_stop; x++) {
       for(y=char_start; y<=char_stop; y++) {
-        if ( ends[x][y] - starts[x][x] > cut_off) {
+        if ( ends[x][y] - starts[x][y] > cut_off) {
           if (record_size - digit >= 6) {
             radixify2(&buffer[starts[x][y] * record_size],
                       ends[x][y] - starts[x][y],
@@ -667,10 +667,6 @@ main(int argc, char *argv[]) {
     }
   }
 
-  if (optind == argc) {
-    fprintf(stderr, "Expected argument after options\n");
-    goto failure;
-  }
 
   unsigned long TickStart = getTick();
 
