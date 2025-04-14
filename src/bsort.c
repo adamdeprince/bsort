@@ -325,6 +325,7 @@ radixify3(register unsigned char *buffer,
   long offsets[char_stop+1][char_stop+1][char_stop+1];
   long starts[char_stop+1][char_stop+1][char_stop+1];
   long ends[char_stop+1][char_stop+1][char_stop+1];
+
   long offset=0;
   unsigned short int temp[record_size];
   long target_x, target_y, target_z, x, y, z, a, b;
@@ -342,14 +343,13 @@ radixify3(register unsigned char *buffer,
   }
   }
   // Compute starting positions
-  
   if (digit == 0) {
     for (x=0; x<count; x++) {
       long c1 = inbuffer[x*record_size];
       long c2 = inbuffer[x*record_size+1];
       long c3 = inbuffer[x*record_size+2];
       counts[c1][c2][c3] += 1;
-      memcpy(buffer+x*record_size, inbuffer+x*record_size, record_size);
+      memcpy(buffer+x*record_size, inbuffer + x*record_size, record_size);
     }
     
     munmap(inbuffer, count * record_size);
@@ -375,7 +375,7 @@ radixify3(register unsigned char *buffer,
 	}
       }
     }    
-    
+      
     /* FIX */
     for(x=char_start; x<=char_stop; x++) {
       for(y=char_start; y<=char_stop; y++) {
@@ -395,7 +395,7 @@ radixify3(register unsigned char *buffer,
     }
     
     ends[char_stop][char_stop][char_stop] = count;
-    
+
     
     for(x=char_start; x<=char_stop; x++) {
       for(y=char_start; y<=char_stop; y++) {
@@ -437,6 +437,7 @@ radixify3(register unsigned char *buffer,
 	}
       }
     }
+
     for(x=char_start; x<=char_stop; x++) {
       for(y=char_start; y<=char_stop; y++) {
 	for(z=char_start; z<=char_stop; z++) {
@@ -617,6 +618,14 @@ void close_sort(struct sort *sort) {
 
 int
 main(int argc, char *argv[]) {
+  struct rlimit rl;
+  rl.rlim_cur = 256 * 256 * 256 * 8 * 5;
+  rl.rlim_max = 256 * 256 * 256 * 8 * 5;
+  if (-1 == setrlimit(RLIMIT_STACK, &rl)) {
+    fprintf(stderr, "Failed to grow stack\n");
+    goto failure;
+  }
+
   int opt;
   int char_start = 0;
   int char_stop = 255;
@@ -628,9 +637,6 @@ main(int argc, char *argv[]) {
   char *outfile=0;
   verbosity = 0;
 
-  struct rlimit rl;
-  rl.rlim_cur = 256 * 256 * 256 * 8 * 5;
-  setrlimit(RLIMIT_STACK, &rl);
     
   while ((opt = getopt(argc, argv, "i:var:k:s:c:o:")) != -1) {
     switch (opt) {
