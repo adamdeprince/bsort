@@ -688,7 +688,7 @@ main(int argc, char *argv[]) {
   }
 
   if (key_size >= 6) {
-    radixify2(outsort.buffer,
+    radixify3(outsort.buffer,
               outsort.size / record_size,
               insort.buffer,
               0,
