@@ -667,10 +667,6 @@ main(int argc, char *argv[]) {
     }
   }
 
-  if (optind == argc) {
-    fprintf(stderr, "Expected argument after options\n");
-    goto failure;
-  }
 
   unsigned long TickStart = getTick();
 
