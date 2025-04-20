@@ -1,3 +1,5 @@
+ #include <sys/types.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -311,7 +313,9 @@ radixify2(register unsigned char *buffer,
 }
   
 void
-radixify3(register unsigned char *buffer,
+
+radixify3(unsigned char *buffer,
+	  int fd,
           const long count,
           unsigned char *inbuffer,
           const long digit,
@@ -428,10 +432,14 @@ radixify3(register unsigned char *buffer,
 	      stack_pointer--;
 	      memcpy(&temp, &buffer[stack[stack_pointer] * record_size], record_size);
 	      while (stack_pointer) {
-		memcpy(&buffer[stack[stack_pointer] * record_size], &buffer[stack[stack_pointer-1] * record_size], record_size);
+		lseek(fd, stack[stack_pointer] * record_size, SEEK_SET);
+		write(fd, &buffer[stack[stack_pointer-1]*record_size], record_size);
+		  //memcpy(&buffer[stack[stack_pointer] * record_size], &buffer[stack[stack_pointer-1] * record_size], record_size);
 		stack_pointer--;
 	      }
-	      memcpy(&buffer[stack[0] * record_size], &temp, record_size);
+	      lseek(fd, stack[0] * record_size, SEEK_SET);
+	      write(fd, &temp, record_size);
+	      // memcpy(&buffer[stack[0] * record_size], &temp, record_size);
 	    }
 	  }
 	}
@@ -695,6 +703,7 @@ main(int argc, char *argv[]) {
 
   if (key_size >= 6) {
     radixify3(outsort.buffer,
+	      outsort.fd,
               outsort.size / record_size,
               insort.buffer,
               0,
