@@ -432,14 +432,14 @@ radixify3(unsigned char *buffer,
 	      stack_pointer--;
 	      memcpy(&temp, &buffer[stack[stack_pointer] * record_size], record_size);
 	      while (stack_pointer) {
-		lseek(fd, stack[stack_pointer] * record_size, SEEK_SET);
-		write(fd, &buffer[stack[stack_pointer-1]*record_size], record_size);
-		  //memcpy(&buffer[stack[stack_pointer] * record_size], &buffer[stack[stack_pointer-1] * record_size], record_size);
+		//lseek(fd, stack[stack_pointer] * record_size, SEEK_SET);
+		//write(fd, &buffer[stack[stack_pointer-1]*record_size], record_size);
+		  memcpy(&buffer[stack[stack_pointer] * record_size], &buffer[stack[stack_pointer-1] * record_size], record_size);
 		stack_pointer--;
 	      }
-	      lseek(fd, stack[0] * record_size, SEEK_SET);
-	      write(fd, &temp, record_size);
-	      // memcpy(&buffer[stack[0] * record_size], &temp, record_size);
+	      //lseek(fd, stack[0] * record_size, SEEK_SET);
+	      //write(fd, &temp, record_size);
+	       memcpy(&buffer[stack[0] * record_size], &temp, record_size);
 	    }
 	  }
 	}
@@ -454,7 +454,7 @@ radixify3(unsigned char *buffer,
             radixify2(&buffer[starts[x][y][z] * record_size],
                       ends[x][y][z] - starts[x][y][z],
                       0,
-                      digit+2,
+                      digit+3,
                       char_start,
                       char_stop,
                       record_size,
@@ -466,7 +466,7 @@ radixify3(unsigned char *buffer,
 	      radixify(&buffer[starts[x][y][z] * record_size],
 			ends[x][y][z] - starts[x][y][z],
 			0,
-			digit+2,
+			digit+3,
 			char_start,
 		       char_stop,
 		       record_size,
