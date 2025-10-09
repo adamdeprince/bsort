@@ -1,4 +1,5 @@
 #!/bin/bash
 python reset.py
-ssh adamdeprince@192.168.1.37  "bash -c 'ulimit -s 1677721600;cd /fast;./bsort -a -c 1000 -s 18 -k 10 -i input -o output'"
+ulimit -s 1677721600
+./bsort -S -a -c 1000 -s 12 -k 10 -i input -o output
 python joules.py

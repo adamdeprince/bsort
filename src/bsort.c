@@ -61,13 +61,15 @@ radixify(register unsigned char *buffer,
          const long count,
 	 unsigned char *inbuffer,
          const long digit,
-         const long char_start,
-         const long char_stop,
-        const long record_size,
+         const int char_start,
+         const int char_stop,
+         const long record_size,
          const long key_size,
          const long stack_size,
-	 const long cut_off) {
+	 const long cut_off,
+	 long *previously_prepared_counts) {
   long counts[char_stop+1];
+  long prepared_counts[char_stop+1][char_stop+1];
   long offsets[char_stop+1];
   long starts[char_stop+1];
   long ends[char_stop+1];
@@ -77,12 +79,13 @@ radixify(register unsigned char *buffer,
   long stack[stack_size+1];
   long stack_pointer = 0;
   long last_position, last_value, next_value;
-
+  printf("Offset: %ld, digit:%ld, count:%ld, start:%d, stop:%d\n", offset, digit, count, char_start, char_stop);
   for (x=char_start; x<=char_stop; x++) {
     counts[x] = 0;
     offsets[x] = 0;
   }
-  
+
+  long total = 0;
   // Compute starting positions
   if (digit == 0) {
     for (x=0; x<count; x++) {
@@ -94,15 +97,31 @@ radixify(register unsigned char *buffer,
     munmap(inbuffer, x * record_size);
    
   } else {
-    for (x=0; x<count; x++) {
-      long c = buffer[x*record_size + digit];
-      counts[c] += 1;
+    if (!previously_prepared_counts) {
+      for (x=0; x<count; x++) {
+	long c = buffer[x*record_size + digit];
+	counts[c] += 1;
+	total += c;
+      }
+    } else {
+      memcpy(&counts, previously_prepared_counts, sizeof(long) * (char_stop+1));
+      for(x=0;x<char_stop;x++) {
+	total += counts[x];
+      }
+    }
+    printf("count: %ld, TOTAL: %ld\n", count, total);
+	    
+  }
+  for (x=char_start;x < char_stop; x++) {
+    for (int y=char_start; y< char_stop; y++) {
+      prepared_counts[x][y] = 0;
     }
   }
   
+  
   // Compute offsets
   offset = 0;
-  for(x=char_start; x<=char_stop; x++) {
+  for(x=char_start; x<char_stop; x++) {
     offsets[x] = offset;
     starts[x] = offsets[x];
     offset += counts[x];
@@ -113,9 +132,11 @@ radixify(register unsigned char *buffer,
   }
   ends[char_stop] = count;
   
-  for(x=char_start; x<=char_stop; x++) {
+  for(x=char_start; x<char_stop; x++) {
+    printf("====%ld\n", x);
     while (offsets[x] < ends[x]) {
-      
+      prepared_counts[x][buffer[offsets[x] * record_size + digit + 1]] += 1;
+      printf("%ld %ld: %hhu\n", x, offsets[x], buffer[offsets[x] * record_size + digit + 1]);
       if (buffer[offsets[x] * record_size + digit] == x) {
 	offsets[x] += 1;
       } else {
@@ -145,8 +166,13 @@ radixify(register unsigned char *buffer,
     }
   }
   
-  for(x=char_start; x<=char_stop; x++) {
+  for(x=char_start; x<char_stop; x++) {
     if ( ends[x] - starts[x] > cut_off) {
+      printf("%ld:  ", x);
+      for(int y=char_start; y<char_stop; y++) {
+	printf("%ld ", prepared_counts[x][y]);
+      }
+      printf("\n");
       radixify(&buffer[starts[x] * record_size],
 	       ends[x] - starts[x],
 	       0,
@@ -156,7 +182,8 @@ radixify(register unsigned char *buffer,
 	       record_size,
 	       key_size,
 	       stack_size,
-	       cut_off);
+	       cut_off,
+	       prepared_counts[x]);
     } else {
       if (ends[x] - starts[x] <= 1) continue;
       shellsort(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, key_size);
@@ -165,161 +192,6 @@ radixify(register unsigned char *buffer,
   }
 }
 
-void
-radixify2(register unsigned char *buffer,
-          const long count,
-          unsigned char *inbuffer,
-          const long digit,
-          const long char_start,
-          const long char_stop,
-          const long record_size,
-          const long key_size,
-          const long stack_size,
-          const long cut_off) {
-  long counts[char_stop+1][char_stop+1];
-  long offsets[char_stop+1][char_stop+1];
-  long starts[char_stop+1][char_stop+1];
-  long ends[char_stop+1][char_stop+1];
-  long offset=0;
-  unsigned short int temp[record_size];
-  long target_x, target_y, x, y, a, b;
-  long stack[stack_size+1];
-  long stack_pointer = 0;
-  long last_position, last_value, next_value;
-
-
-  for (x=char_start; x<=char_stop; x++) {
-    for (y=char_start; y<=char_stop; y++) {
-      counts[x][y] = 0;
-      offsets[x][y] = 0;
-    }
-  }  
-  // Compute starting positions
-  
-  if (digit == 0) {
-    for (x=0; x<count; x++) {
-      long c1 = inbuffer[x*record_size];
-      long c2 = inbuffer[x*record_size+1];
-      counts[c1][c2] += 1;
-      memcpy(buffer+x*record_size, inbuffer+x*record_size, record_size);
-    }
-
-    munmap(inbuffer, x * record_size);
-    
-  } else {
-    for (x=0; x<count; x++) {
-      long c1 = buffer[x*record_size + digit];
-      long c2 = buffer[x*record_size + digit + 1];
-      counts[c1][c2] += 1;
-    }
-  }
-  
-
-    // Compute offsets
-    offset = 0;
-    for(x=char_start; x<=char_stop; x++) {
-      for(y=char_start; y<=char_stop; y++) {
-        offsets[x][y] = offset;
-        starts[x][y] = offsets[x][y];
-        offset += counts[x][y];
-      }
-    }
-    
-    
-    /* FIX */
-    for(x=char_start; x<=char_stop; x++) {
-      for(y=char_start; y<=char_stop; y++) {
-	if ((x == char_stop) && (y == char_stop)) break;
-	if (y == char_stop) {
-	  ends[x][y] = offsets[x+1][char_start];
-	} else {
-	  ends[x][y] = offsets[x][y+1];
-	}
-      }
-    }
-    
-    ends[char_stop][char_stop] = count;
-
-    
-    for(x=char_start; x<=char_stop; x++) {
-      for(y=char_start; y<=char_stop; y++) {
-        while (offsets[x][y] < ends[x][y]) {
-	  
-          if (buffer[offsets[x][y] * record_size + digit] == x && buffer[offsets[x][y] * record_size + digit + 1] == y) {
-
-            offsets[x][y] += 1;
-          } else {
-            stack_pointer=0;
-            stack[stack_pointer] = offsets[x][y];
-            stack_pointer += 1;
-            target_x = buffer[offsets[x][y] * record_size + digit];
-            target_y = buffer[offsets[x][y] * record_size + digit + 1];
-
-            while( (target_x != x || target_y != y) && stack_pointer < stack_size ) {
-              stack[stack_pointer] = offsets[target_x][target_y];
-              offsets[target_x][target_y] += 1;
-	  
-              target_x = buffer[stack[stack_pointer] * record_size + digit];
-              target_y = buffer[stack[stack_pointer] * record_size + digit+1];
-              stack_pointer++;
-            };
-            if (target_x == x && target_y == y) {
-              offsets[x][y] += 1;
-            }
-            stack_pointer--;
-            memcpy(&temp, &buffer[stack[stack_pointer] * record_size], record_size);
-            while (stack_pointer) {
-              memcpy(&buffer[stack[stack_pointer] * record_size], &buffer[stack[stack_pointer-1] * record_size], record_size);
-              stack_pointer--;
-            }
-            memcpy(&buffer[stack[0] * record_size], &temp, record_size);
-          }
-        }
-      }
-    }
-
-    if (record_size - digit >= 6) {
-      for(x=char_start; x<=char_stop; x++) {
-	for(y=char_start; y<=char_stop; y++) {
-	  if ( ends[x][y] - starts[x][y] > cut_off) {
-
-            radixify2(&buffer[starts[x][y] * record_size],
-                      ends[x][y] - starts[x][y],
-                      0,
-                      digit+2,
-                      char_start,
-                      char_stop,
-                      record_size,
-                      key_size,
-                      stack_size,
-                      cut_off);
-          } else {
-	    shellsort(&buffer[starts[x][y] * record_size], ends[x][y] - starts[x][y], record_size, key_size);
-	  }
-	}
-      }
-    } else {
-      for(x=char_start; x<=char_stop; x++) {
-	for(y=char_start; y<=char_stop; y++) {
-	  if ( ends[x][y] - starts[x][y] > cut_off) {
-            radixify(&buffer[starts[x][y] * record_size],
-		     ends[x][y] - starts[x][y],
-		     0,
-		     digit+2,
-		     char_start,
-		     char_stop,
-		     record_size,
-		     key_size,
-		     stack_size,
-		     cut_off);
-          }
-	  else {
-	    shellsort(&buffer[starts[x][y] * record_size], ends[x][y] - starts[x][y], record_size, key_size);
-	  }
-	}
-      }
-    }
-}
   
 
 
@@ -543,30 +415,17 @@ main(int argc, char *argv[]) {
     }
   }
   fprintf(stderr,"Key size: %d\n", key_size);
-  if (key_size >= 6 && !single) {
-    radixify2(outsort.buffer,
-		outsort.size / record_size,
-	      insort.buffer,
-	      0,
-	      char_start,
-	      char_stop,
-	      record_size,
-	      key_size,
-	      stack_size,
-	      cut_off);
-  } else {
-    radixify(outsort.buffer,
-	     outsort.size / record_size,
-	     insort.buffer,
-	     0,
-	     char_start,
-	     char_stop,
-	     record_size,
-	     key_size,
-	     stack_size,
-	     cut_off);
-  }
-
+  radixify(outsort.buffer,
+	   outsort.size / record_size,
+	   insort.buffer,
+	   0,
+	   char_start,
+	   char_stop,
+	   record_size,
+	   key_size,
+	   stack_size,
+	   cut_off,
+	   NULL);
 
   optind++;
   
