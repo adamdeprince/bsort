@@ -1,5 +1,3 @@
- #include <sys/types.h>
-#include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +7,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-#include <sys/resource.h>
+
 
 
 int verbosity;
@@ -37,17 +35,23 @@ shellsort(unsigned char *a,
           const int n,
           const int record_size,
           const int key_size) {
+  int i, j;
   char temp[record_size];
 
-  int j;
-  for (int gap = n/2; gap > 0; gap /= 2) {
-    for (int i = gap; i < n; i++) {
-      memcpy(temp, a+i*record_size, record_size);
-      for (j = i; j >= gap && memcmp(a + (j - gap) * record_size, temp, record_size) >= 0; j -= gap) {
-	memcpy(a + j*record_size, a + (j-gap) * record_size, record_size);
-      }
-      memcpy(a + j*record_size, temp, record_size);
+  for (i=3; i < n; i++) {
+    memcpy(&temp, &a[i * record_size], record_size);
+    for(j=i; j>=3 && memcmp(a+(j-3)*record_size, &temp, key_size) >0; j -= 3) {
+      memcpy(a+j*record_size, a+(j-3)*record_size, record_size);
     }
+    memcpy(a+j*record_size, &temp, record_size);
+  }
+
+  for (i=1; i < n; i++) {
+    memcpy(&temp, &a[i*record_size], record_size);
+    for(j=i; j>=1 && memcmp(a+(j-1)*record_size, &temp, key_size) >0; j -= 1) {
+      memcpy(a+j*record_size, a+(j-1)*record_size, record_size);
+    }
+    memcpy(a+j*record_size, &temp, record_size);
   }
 }
 
@@ -61,15 +65,13 @@ radixify(register unsigned char *buffer,
          const long count,
 	 unsigned char *inbuffer,
          const long digit,
-         const int char_start,
-         const int char_stop,
+         const long char_start,
+         const long char_stop,
          const long record_size,
          const long key_size,
          const long stack_size,
-	 const long cut_off,
-	 long *previously_prepared_counts) {
+	 const long cut_off) {
   long counts[char_stop+1];
-  long prepared_counts[char_stop+1][char_stop+1];
   long offsets[char_stop+1];
   long starts[char_stop+1];
   long ends[char_stop+1];
@@ -79,14 +81,15 @@ radixify(register unsigned char *buffer,
   long stack[stack_size+1];
   long stack_pointer = 0;
   long last_position, last_value, next_value;
-  printf("Offset: %ld, digit:%ld, count:%ld, start:%d, stop:%d\n", offset, digit, count, char_start, char_stop);
+
+  
   for (x=char_start; x<=char_stop; x++) {
     counts[x] = 0;
     offsets[x] = 0;
   }
-
-  long total = 0;
+  
   // Compute starting positions
+
   if (digit == 0) {
     for (x=0; x<count; x++) {
       long c = inbuffer[x*record_size];
@@ -97,31 +100,16 @@ radixify(register unsigned char *buffer,
     munmap(inbuffer, x * record_size);
    
   } else {
-    if (!previously_prepared_counts) {
-      for (x=0; x<count; x++) {
-	long c = buffer[x*record_size + digit];
-	counts[c] += 1;
-	total += c;
-      }
-    } else {
-      memcpy(&counts, previously_prepared_counts, sizeof(long) * (char_stop+1));
-      for(x=0;x<char_stop;x++) {
-	total += counts[x];
-      }
-    }
-    printf("count: %ld, TOTAL: %ld\n", count, total);
-	    
-  }
-  for (x=char_start;x < char_stop; x++) {
-    for (int y=char_start; y< char_stop; y++) {
-      prepared_counts[x][y] = 0;
+    for (x=0; x<count; x++) {
+      long c = buffer[x*record_size + digit];
+      counts[c] += 1;
     }
   }
   
   
   // Compute offsets
   offset = 0;
-  for(x=char_start; x<char_stop; x++) {
+  for(x=char_start; x<=char_stop; x++) {
     offsets[x] = offset;
     starts[x] = offsets[x];
     offset += counts[x];
@@ -132,11 +120,9 @@ radixify(register unsigned char *buffer,
   }
   ends[char_stop] = count;
   
-  for(x=char_start; x<char_stop; x++) {
-    printf("====%ld\n", x);
+  for(x=char_start; x<=char_stop; x++) {
     while (offsets[x] < ends[x]) {
-      prepared_counts[x][buffer[offsets[x] * record_size + digit + 1]] += 1;
-      printf("%ld %ld: %hhu\n", x, offsets[x], buffer[offsets[x] * record_size + digit + 1]);
+      
       if (buffer[offsets[x] * record_size + digit] == x) {
 	offsets[x] += 1;
       } else {
@@ -166,13 +152,8 @@ radixify(register unsigned char *buffer,
     }
   }
   
-  for(x=char_start; x<char_stop; x++) {
+  for(x=char_start; x<=char_stop; x++) {
     if ( ends[x] - starts[x] > cut_off) {
-      printf("%ld:  ", x);
-      for(int y=char_start; y<char_stop; y++) {
-	printf("%ld ", prepared_counts[x][y]);
-      }
-      printf("\n");
       radixify(&buffer[starts[x] * record_size],
 	       ends[x] - starts[x],
 	       0,
@@ -182,8 +163,7 @@ radixify(register unsigned char *buffer,
 	       record_size,
 	       key_size,
 	       stack_size,
-	       cut_off,
-	       prepared_counts[x]);
+	       cut_off);
     } else {
       if (ends[x] - starts[x] <= 1) continue;
       shellsort(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, key_size);
@@ -191,9 +171,6 @@ radixify(register unsigned char *buffer,
     }
   }
 }
-
-  
-
 
 int read_sort(char *path, struct sort *sort) {
   void *buffer = NULL;
@@ -206,6 +183,7 @@ int read_sort(char *path, struct sort *sort) {
   if (-1 == fstat(fd, &stats))
     goto error;
 
+  fprintf(stderr, "read_sort size: %lu\n", stats.st_size);
 
   if (!(buffer = mmap(NULL,
                       stats.st_size,
@@ -213,22 +191,19 @@ int read_sort(char *path, struct sort *sort) {
                       MAP_SHARED,
                       fd,
                       0
-                      )))
+                     )))
     goto error;
-  madvise(buffer, stats.st_size, POSIX_MADV_WILLNEED | POSIX_MADV_SEQUENTIAL);
+      madvise(buffer, stats.st_size, POSIX_MADV_WILLNEED | POSIX_MADV_SEQUENTIAL);
 
   sort->buffer = buffer;
   sort->size = stats.st_size;
   sort->fd = fd;
   return 0;
-
   
-  
-error:
+ error:
   perror(path);
   if (buffer)
     munmap(buffer, stats.st_size);
-
   if (fd != -1)
     close(fd);
   sort->buffer = 0;
@@ -248,6 +223,7 @@ int open_sort(char *path, struct sort *sort) {
   if (-1 == fstat(fd, &stats))
     goto error;
   
+  fprintf(stderr, "open size: %lu\n", stats.st_size);
   
   if (!(buffer = mmap(NULL,
                       stats.st_size,
@@ -255,16 +231,16 @@ int open_sort(char *path, struct sort *sort) {
                       MAP_SHARED,
                       fd,
                       0
-                      )))
+                     )))
     goto error;
-  madvise(buffer, stats.st_size, POSIX_MADV_WILLNEED | POSIX_MADV_SEQUENTIAL);
+      madvise(buffer, stats.st_size, POSIX_MADV_WILLNEED | POSIX_MADV_SEQUENTIAL);
 
   sort->buffer = buffer;
   sort->size = stats.st_size;
   sort->fd = fd;
   return 0;
   
-error:
+ error:
   perror(path);
   if (buffer)
     munmap(buffer, stats.st_size);
@@ -283,6 +259,7 @@ int create_sort(char *path, struct sort *sort, struct sort *input) {
   int fd = open(path, O_RDWR | O_CREAT, 0644);
   if (fd == -1)
     goto error;
+
   if (-1 == lseek(fd, input->size-1, SEEK_SET))
     goto error;
 
@@ -292,6 +269,7 @@ int create_sort(char *path, struct sort *sort, struct sort *input) {
   struct stat stats;
   if (-1 == fstat(fd, &stats))
     goto error;
+  fprintf(stderr, "create_sort %lu\n", stats.st_size);
   
   if (!(buffer = mmap(NULL,
                       stats.st_size,
@@ -302,14 +280,16 @@ int create_sort(char *path, struct sort *sort, struct sort *input) {
 		      )))
     goto error;
 
+  fprintf(stderr, "madvise\n");
   madvise(buffer, stats.st_size, POSIX_MADV_WILLNEED | POSIX_MADV_SEQUENTIAL);
 
   sort->buffer = buffer;
   sort->size = stats.st_size;
   sort->fd = fd;
+  fprintf(stderr, "Returning\n");
   return 0;
   
-error:
+ error:
   perror(path);
   if (buffer)
     munmap(buffer, stats.st_size);
@@ -318,7 +298,7 @@ error:
   sort->buffer = 0;
   sort->fd = 0;
   return -1;
-}
+  }
 
 
 void close_sort(struct sort *sort) {
@@ -337,27 +317,17 @@ void close_sort(struct sort *sort) {
 
 int
 main(int argc, char *argv[]) {
-  struct rlimit rl;
-  rl.rlim_cur = 256 * 256 * 8 * 5 * 10;
-  rl.rlim_max = 256 * 256 * 8 * 5 * 10;
-  if (-1 == setrlimit(RLIMIT_STACK, &rl)) {
-    fprintf(stderr, "Failed to grow stack\n");
-    goto failure;
-  }
-
   int opt;
   int char_start = 0;
   int char_stop = 255;
   int record_size=100;
   int key_size=10;
-  int stack_size=12;
-  int cut_off = 1000;
+  int stack_size=5;
+  int cut_off = 3000;
   char *infile=0;
-  char *outfile=0;
   verbosity = 0;
-  int single = 0;
-    
-  while ((opt = getopt(argc, argv, "i:var:k:s:c:o:S")) != -1) {
+
+  while ((opt = getopt(argc, argv, "i:var:k:s:c:")) != -1) {
     switch (opt) {
     case 'v':
       verbosity += 1;
@@ -381,61 +351,66 @@ main(int argc, char *argv[]) {
     case 'i':
       infile = strdup(optarg);
       fprintf(stderr, "input file:%s\n", optarg);
-      break;
-    case 'o':
-      outfile = strdup(optarg);
-      fprintf(stderr, "output file:%s\n", optarg);
-      break;
-    case 'S':
-      single = 1;
-      break;
+      break;					  
     default:
       fprintf(stderr, "Invalid parameter: -%c\n", opt);
       goto failure;
     }
   }
 
+  if (optind == argc) {
+    fprintf(stderr, "Expected argument after options\n");
+    goto failure;
+  }
 
   unsigned long TickStart = getTick();
 
   if (verbosity)
     printf("sorting %s\n", argv[optind]);
+  struct sort sort;
   
   struct sort insort;
-  struct sort outsort;
   if (infile) {
     if (-1==read_sort(infile, &insort)) {
       fprintf(stderr, "Failed to open input");
       goto failure;
     }
     
-    if (-1==create_sort(outfile, &outsort, &insort)) {
+    if (-1==create_sort(argv[optind], &sort, &insort)) {
+      fprintf(stderr, "Failed to create output file");
+      goto failure;
+    }
+  } else {
+    if (-1==open_sort(argv[optind], &sort)) {
       fprintf(stderr, "Failed to open output file");
       goto failure;
     }
   }
-  fprintf(stderr,"Key size: %d\n", key_size);
-  radixify(outsort.buffer,
-	   outsort.size / record_size,
-	   insort.buffer,
+  if (sort.size != insort.size) {
+    fprintf(stderr, "Mismatched sort sizes");
+    goto failure;
+  }
+    
+  radixify(sort.buffer,
+           sort.size / record_size,
+           insort.buffer,
 	   0,
-	   char_start,
-	   char_stop,
-	   record_size,
-	   key_size,
-	   stack_size,
-	   cut_off,
-	   NULL);
-
+           char_start,
+           char_stop,
+           record_size,
+           key_size,
+           stack_size,
+           cut_off);
+  close_sort(&sort);
   optind++;
   
-  
+
   printf("Processing time: %.3f s\n", (float)(getTick() - TickStart) / 1000);
 
   exit(0);
 failure:
   fprintf(stderr,
-          "Usage: %s [-v] [-a] [-r ###] [-k ###] [-s ###] -i [infile] -o [file] \n",
+          "Usage: %s [-v] [-a] [-r ###] [-k ###] [-s ###] -i [infile] <out>file \n",
           argv[0]);
   fprintf(stderr,
           "Individually sort binary files inplace with a radix sort\n"
@@ -455,11 +430,11 @@ failure:
           "  -s ###   pushahead stack size.  (default 12)\n"
           "  -c ###   buffer size after which to use shell sort (defaults to 3000)\n"
           "\n"
-          "Report bsort bugs to adam.deprince@gmail.com\n"
-          );
+          "Report bsort bugs to adam@pelotoncycle.com\n"
+         );
   exit(1);
 }
-    
+
 
 
 
