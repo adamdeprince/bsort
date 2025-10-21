@@ -70,26 +70,27 @@ radixify(register unsigned char *buffer,
          const long record_size,
          const long key_size,
          const long stack_size,
-	 const long cut_off) {
+	 const long cut_off,
+	 const long histogram[]) {
   long counts[char_stop+1];
   long offsets[char_stop+1];
   long starts[char_stop+1];
   long ends[char_stop+1];
   long offset=0;
   unsigned char temp[record_size];
-  long target, x, a, b;
+  long target, x, y, a, b;
   long stack[stack_size+1];
   long stack_pointer = 0;
   long last_position, last_value, next_value;
 
-  
+  fprintf(stderr, "Char_start: %ld  Char_stop: %ld\n", char_start, char_stop);  
   for (x=char_start; x<=char_stop; x++) {
     counts[x] = 0;
     offsets[x] = 0;
   }
   
   // Compute starting positions
-
+  fprintf(stderr, "DIGIT: %ld\n", digit);
   if (digit == 0) {
     for (x=0; x<count; x++) {
       long c = inbuffer[x*record_size];
@@ -100,20 +101,30 @@ radixify(register unsigned char *buffer,
     munmap(inbuffer, x * record_size);
    
   } else {
-    for (x=0; x<count; x++) {
-      long c = buffer[x*record_size + digit];
-      counts[c] += 1;
+    memcpy(counts, histogram, sizeof(long) * char_stop);
+    /* for (x=0; x<count; x++) { */
+    /*   long c = buffer[x*record_size + digit]; */
+    /*   counts[c] += 1; */
+    /* } */
+  }
+
+  long next_histogram[char_stop+1][char_stop+1];
+  
+  for(x=0; x<=char_stop; x++) {
+    for (y=0; y<=char_stop; y++) {
+      next_histogram[x][y] = 0;
     }
   }
   
-  
   // Compute offsets
   offset = 0;
-  for(x=char_start; x<=char_stop; x++) {
+
+  for(x=char_start; x<char_stop; x++) {
     offsets[x] = offset;
     starts[x] = offsets[x];
     offset += counts[x];
   }
+  fprintf(stderr, "OFFSET: %ld\n", offset);
   
   for(x=char_start; x<char_stop; x++) {
     ends[x] = offsets[x+1];
@@ -124,6 +135,7 @@ radixify(register unsigned char *buffer,
     while (offsets[x] < ends[x]) {
       
       if (buffer[offsets[x] * record_size + digit] == x) {
+	next_histogram[buffer[offsets[x]*record_size + digit]][buffer[offsets[x] * record_size + digit + 1]] += 1;
 	offsets[x] += 1;
       } else {
 	stack_pointer=0;
@@ -133,27 +145,46 @@ radixify(register unsigned char *buffer,
 	
 	while( target != x && stack_pointer < stack_size ) {
 	  stack[stack_pointer] = offsets[target];
+	  if (offsets[target] > 2000000) {
+	    fprintf(stderr,"ERROR: target %ld  offset %ld  ends %ld\n", target, offsets[target], ends[target]);
+	    exit(0);
+	  }
 	  offsets[target] += 1;
 	  
 	  target = buffer[stack[stack_pointer] * record_size + digit];
 	  stack_pointer++;
 	};
 	if (target == x) {
+	  next_histogram[buffer[offsets[x]*record_size + digit]][buffer[offsets[x] * record_size + digit + 1]] += 1;
 	  offsets[x] += 1;
 	}
 	stack_pointer--;
 	memcpy(&temp, &buffer[stack[stack_pointer] * record_size], record_size);
+	next_histogram[temp[digit]][temp[digit + 1]] += 1;
 	while (stack_pointer) {
 	  memcpy(&buffer[stack[stack_pointer] * record_size], &buffer[stack[stack_pointer-1] * record_size], record_size);
+	  next_histogram[buffer[stack[stack_pointer] * record_size + digit]][buffer[stack[stack_pointer] * record_size + digit + 1]] += 1;
 	  stack_pointer--;
 	}
         memcpy(&buffer[stack[0] * record_size], &temp, record_size);
       }
     }
   }
+
+  long tally = 0;
+  for(x=0; x<=char_stop; x++) {
+    for (y=0; y<=char_stop; y++) {
+      tally += next_histogram[x][y];
+    }
+  }
+
+  fprintf(stderr, "TALLY: %ld\n", tally);
   
-  for(x=char_start; x<=char_stop; x++) {
+
+  for(x=char_start; x<char_stop; x++) {
     if ( ends[x] - starts[x] > cut_off) {
+      fprintf(stderr, "cutoff: %ld %ld %ld\n", x, ends[x], starts[x]);
+      fprintf(stderr, "RADIXIFY: %ld\n", x);
       radixify(&buffer[starts[x] * record_size],
 	       ends[x] - starts[x],
 	       0,
@@ -163,7 +194,8 @@ radixify(register unsigned char *buffer,
 	       record_size,
 	       key_size,
 	       stack_size,
-	       cut_off);
+	       cut_off,
+	       next_histogram[x]);
     } else {
       if (ends[x] - starts[x] <= 1) continue;
       shellsort(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, key_size);
@@ -390,7 +422,8 @@ main(int argc, char *argv[]) {
     fprintf(stderr, "Mismatched sort sizes");
     goto failure;
   }
-    
+
+  fprintf(stderr, "PTR: %lu, %d, %d ", (unsigned long)sort.buffer, char_start, char_stop);
   radixify(sort.buffer,
            sort.size / record_size,
            insort.buffer,
@@ -400,7 +433,8 @@ main(int argc, char *argv[]) {
            record_size,
            key_size,
            stack_size,
-           cut_off);
+           cut_off,
+	   NULL);
   close_sort(&sort);
   optind++;
   
@@ -425,7 +459,7 @@ failure:
           "  -i fname input filename.  Required for competition\n"
           "  -v  verbose output logging\n"
           "\n"
-          "Tuning Options:\n"
+          "Tunig Options:\n"
           "\n"
           "  -s ###   pushahead stack size.  (default 12)\n"
           "  -c ###   buffer size after which to use shell sort (defaults to 3000)\n"
