@@ -70,18 +70,19 @@ radixify(register unsigned char *buffer,
          const long record_size,
          const long key_size,
          const long stack_size,
-	 const long cut_off) {
+	 const long cut_off,
+	 const long histogram[]) {
   long counts[char_stop+1];
   long offsets[char_stop+1];
   long starts[char_stop+1];
   long ends[char_stop+1];
   long offset=0;
   unsigned char temp[record_size];
-  long target, x, a, b;
+  long target, target2, x, a, b;
   long stack[stack_size+1];
   long stack_pointer = 0;
   long last_position, last_value, next_value;
-
+  long next_histogram[char_stop+1][char_stop+1];
   
   for (x=char_start; x<=char_stop; x++) {
     counts[x] = 0;
@@ -100,12 +101,19 @@ radixify(register unsigned char *buffer,
     munmap(inbuffer, x * record_size);
    
   } else {
-    for (x=0; x<count; x++) {
-      long c = buffer[x*record_size + digit];
-      counts[c] += 1;
+    memcpy(counts, histogram, sizeof(long) * char_stop);
+    /* for (x=0; x<count; x++) { */
+    /*   long c = buffer[x*record_size + digit]; */
+    /*   counts[c] += 1; */
+    /* } */
+  }
+
+
+  for(x=0; x<256; x++) {
+    for (int y=0; y<256; y++) {
+      next_histogram[x][y] = 0;
     }
   }
-  
   
   // Compute offsets
   offset = 0;
@@ -124,27 +132,34 @@ radixify(register unsigned char *buffer,
     while (offsets[x] < ends[x]) {
       
       if (buffer[offsets[x] * record_size + digit] == x) {
+	  next_histogram[x][buffer[offsets[x] * record_size + digit + 1]] += 1;
+	// next_histogram[buffer[offsets[x]*record_size + digit]][buffer[offsets[x] * record_size + digit + 1]] += 1;
 	offsets[x] += 1;
       } else {
 	stack_pointer=0;
 	stack[stack_pointer] = offsets[x];
 	stack_pointer += 1;
 	target = buffer[offsets[x] * record_size + digit];
-	
+	target2 = buffer[offsets[x] * record_size + digit + 1];
 	while( target != x && stack_pointer < stack_size ) {
 	  stack[stack_pointer] = offsets[target];
 	  offsets[target] += 1;
+	  next_histogram[target][target2] += 1;
 	  
 	  target = buffer[stack[stack_pointer] * record_size + digit];
+	  target2 = buffer[stack[stack_pointer] * record_size + digit + 1];
 	  stack_pointer++;
 	};
 	if (target == x) {
+	  next_histogram[target][target2] += 1;
 	  offsets[x] += 1;
 	}
 	stack_pointer--;
 	memcpy(&temp, &buffer[stack[stack_pointer] * record_size], record_size);
+	// next_histogram[temp[digit]][temp[digit + 1]] += 1;
 	while (stack_pointer) {
 	  memcpy(&buffer[stack[stack_pointer] * record_size], &buffer[stack[stack_pointer-1] * record_size], record_size);
+	  // next_histogram[buffer[stack[stack_pointer] * record_size + digit]][buffer[stack[stack_pointer] * record_size + digit + 1]] += 1;
 	  stack_pointer--;
 	}
         memcpy(&buffer[stack[0] * record_size], &temp, record_size);
@@ -163,7 +178,8 @@ radixify(register unsigned char *buffer,
 	       record_size,
 	       key_size,
 	       stack_size,
-	       cut_off);
+	       cut_off,
+	       next_histogram[x]);
     } else {
       if (ends[x] - starts[x] <= 1) continue;
       shellsort(&buffer[starts[x] * record_size], ends[x] - starts[x], record_size, key_size);
@@ -400,7 +416,8 @@ main(int argc, char *argv[]) {
            record_size,
            key_size,
            stack_size,
-           cut_off);
+           cut_off,
+	   0);
   close_sort(&sort);
   optind++;
   
