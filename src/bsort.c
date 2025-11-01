@@ -109,8 +109,8 @@ radixify(register unsigned char *buffer,
   }
 
 
-  for(x=0; x<256; x++) {
-    for (int y=0; y<256; y++) {
+  for(x=0; x<char_stop; x++) {
+    for (int y=0; y<char_stop; y++) {
       next_histogram[x][y] = 0;
     }
   }
