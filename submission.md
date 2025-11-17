@@ -39,7 +39,7 @@ When you've reached the last letter of the key, or all of your datasets to sort 
 
 There are a few optimizations you can make.   For recursive calls the sort function will eventually be asked to sort a very small number of rows.  This will work, but on modern hardware its more efficient to switch to a shell sort when the size of the row collection to sort drops below about 1000. 
 
-Row swapping can be optimized somewhat to reduce the number of memory copies in half.   Instead of swapping two rows each pass, a note of what row will be swapped can be pushed onto a stack.   When the stack his a predefined limit, controllable by the `-s` flag in bsort, it is unrolled and records are 'rolled' from one to the next.  So a->b, b->c, c->d, d->e, e->a instead of performing individual swaps.   This saves CPU which improves the power consumption somewhat, but it's necessary to implement the core algorithm. 
+Row swapping can be optimized somewhat to reduce the number of memory copies in half.   Instead of swapping two rows each pass, a note of what row will be swapped can be pushed onto a stack.   When the stack his a predefined limit, controllable by the `-s` flag in bsort, it is unrolled and records are 'rolled' from one to the next.  So a->b, b->c, c->d, d->e, e->a instead of performing individual swaps through a.   This saves CPU which improves the power consumption somewhat, but it's not necessary to implement the core algorithm. 
 
 Computing the histogram inline will reduce the number of reads from 2n where n is the number of characters in the key to n+1.  This makes a small difference in run time as on modern hardware the wall time is dominated by SSD writes.
 
