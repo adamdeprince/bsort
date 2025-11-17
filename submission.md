@@ -119,3 +119,8 @@ Checksum: 12a06cd06eeb64b16
 Duplicate keys: 0
 SUCCESS - all records are in order
 ```
+
+# References:
+
+* [Ubuntu Linux](https://ubuntu.com)
+* [Yocto-watt](https://www.yoctopuce.com/EN/products/usb-electrical-sensors/yocto-watt)
