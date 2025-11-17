@@ -2,7 +2,7 @@ Joule sort Daytona submission
 
 This readme briefly describes my submission for the 2025 Daytona Joulesort competition.  
 
-Bsort is a unique "inverted radix sort" for which the details of operation will be explained in a future paper.  It source can be found at [bsort.c](https://github.com/adamdeprince/bsort/blob/master/src/bsort.c).  It is compiled with a C compiler as: `gcc -O3 -march=native bsort.c -o bsort` and for our sort execution we ran bsort as `./bsort -a -c 10 -s 18 -k 10 -i input output` where -s and -c are tuning parameters described in `./bsort --help` that have a minor impact on performance.  Because this code is I/O bound compiler optimizations don't affect run time, but do affect CPU power consumption during the run. 
+Bsort is a unique "inverted radix sort".  It source can be found at [bsort.c](https://github.com/adamdeprince/bsort/blob/master/src/bsort.c).  It is compiled with a C compiler as: `gcc -O3 -march=native bsort.c -o bsort` and for our sort execution we ran bsort as `./bsort -a -c 10 -s 18 -k 10 -i input output` where -s and -c are tuning parameters described in `./bsort --help` that have a minor impact on performance.  Because this code is I/O bound compiler optimizations don't affect run time, but do affect CPU power consumption during the run. 
 
 For the purposes of the Daytona search, the following flags adjust for differing record sizes.
 
