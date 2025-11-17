@@ -10,12 +10,12 @@ For the purposes of the Daytona search, the following flags adjust for differing
 * `-r`: The record size in bytes.  Defaults to 100
 * `-k`: The size of the key portion of the record.  Defaults to 10
 
-Tuning parameters: 
+# Tuning parameters: 
 
 * `-s` controls the depth of the relocation stack (to be explained in a future paper)
 * `-c` controls the threshold sort group size at which the algorithm switches from a radix sort to a shell sort.
 
-Algorithm: 
+# Algorithm: 
 
 The sort algorithm is a straightforward radix sort, except it starts with the most significant byte.  In the initial pass a copy is made from the input to output to comply with the rules of the Joulesort that require separate input and output files.   During this initial pass a histogram of the first bytes of the keys are made.
 After the copy is the sort phase.  The sort phase is called recursively, each level receiving a start index, end index and histogram from the previous level.   For the initial sort phase the histogram from the copy and indices representing the entirely of the file are passed to the sort function.
@@ -30,7 +30,7 @@ Once the sort is complete your rows should be in their correct location in so fa
 
 When you've reached the last letter of the key, or all of your datasets to sort have one or less records, you're done. 
 
-Optimizations:
+# Optimizations:
 
 There are a few optimizations you cam make.   For recursive calls the sort function will eventually be asked to sort a very small number of rows.  This will work, but on modern hardware its more efficient to switch to a shell sort when the size of the row collection to sort drops below about 1000. 
 
@@ -38,11 +38,13 @@ Row swapping can be optimized somewhat to reduce the number of memory copies in 
 
 Computing the histogram inline will reduce the number of reads from 2n where n is the number of characters in the key to n+1.  This makes a small difference in run time as on modern hardware the wall time is dominated by SSD writes.
 
-Hardware:
+# Hardware:
 
 The sort code was run on a Raspberry Pi 5 with 16Gb ram equipted with the Raspberry Pi M.2 HAT equipped with a a Oyen Digital M/2 Series PCIe Gen x4 NVMe SSE of 4Tb in size.  The OS was Ubuntu 25.10.  The boot drive was the stock SD card shipped with the Raspbery and the entirely of the NVMe drive was dedicated to search and formatted as a btrfs filesystem.   It was unused prior to running the initial search, maximizing the number of unused blocks.  The board was enclosed in a "GeekPI" metal case and provided with a stock Raspberry PI cooling fan for the CPU.  The raspberry PI was connected to a generic USB power adapter capable of providing 5V and 5amps as required by the device. 
 
 Power is measured by a [yocto-watt power meter](https://www.yoctopuce.com/EN/products/usb-electrical-sensors/yocto-watt) running the latest firmware, which has the same accuracy as a the BrandElectronics Model 20-1850/CI used in the original Joule Sort. The yocto-watt sensor is resettable and automatically measures power consumption without supervision, so no I/O was necessary during the run. 
+
+# Execution: 
 
 Execution was orchestrated by a shell script running on a MacBook Pro M4 Max.  The yocto-watt sensor was connected to the Macbook Pro by usb.   The following script was run five times, rebooting the device between executions to flush data from the backing store.   
 
@@ -53,6 +55,7 @@ ssh adam@192.168.1.59  "cd /fast && ulimit -s 1677721600 && time ./bsort -a -c 5
 python joules.py # https://github.com/adamdeprince/bsort/blob/master/joules.py
 ```
 
+# Performance: 
 
 Five passes were run, each taking approximately 6 hours.  
 
