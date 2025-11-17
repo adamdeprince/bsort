@@ -1,4 +1,5 @@
 Joule sort Daytona submission
+By Adam DePrince November 17, 2025
 
 This readme briefly describes my submission for the 2025 Daytona Joulesort competition.  Bsort on a Raspbery PI 5 required 47,969 joules, 81% the energy and 40% the cost of the 2023 Daytona Joulesort winner MendSort and 91% the energy and 114% the cost of the 2023 Indy Joulesort winner Arm5. 
 
