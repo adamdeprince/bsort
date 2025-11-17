@@ -18,10 +18,15 @@ For the purposes of the Daytona search, the following flags adjust for differing
 # Algorithm: 
 
 The sort algorithm is a straightforward radix sort, except it starts with the most significant byte.  In the initial pass a copy is made from the input to output to comply with the rules of the Joulesort that require separate input and output files.   During this initial pass a histogram of the first bytes of the keys are made.
+
 After the copy is the sort phase.  The sort phase is called recursively, each level receiving a start index, end index and histogram from the previous level.   For the initial sort phase the histogram from the copy and indices representing the entirely of the file are passed to the sort function.
+
 From the histogram the sort function computes the offsets at which each letter will start.  Assuming we're working in ASCII, the space character goes first and is marked as starting at offset 0 and ending at the number of spaces indicated in the histogram.   The next character `!`, starts at the number of spaces and ends at the number of spaces plus the number of exclamation points.  The next character `"` starts at the offset equal to the number of spaces plus the number of exclamation points, and ends at the number of spaces plus the number of exclamation points, plus the number of double quotes.  This process is continued to build an offset start and offset ending table for all of the characters. 
+
 The sort begins by reading the first row - assign to this first row a "swap pointer" that indicates the current row you are working on.  If the first character a space, we increment our space offset start by one and increment our swap pointer by one.  If its not a space  we note its first letter and swap the record with the record at the offset start for that first letter.  We then increment the offset for that first letter so our new entry is not over written and continue the process, noting if our first row starts with a space.  
+
 Eventually as myriad indices are advanced for rows swapped through the first row, you'll encounter a records that starts with a space.  When that happens, you increment the "swap pointer" from the first row to the second row and so forth.  The process is continued until the row index reaches the spaces ending offset, at which you move to `!` and repeat the process. 
+
 Gradually the algorithm will work its way through all of the records, speeding up as it goes because with each successful letter the number of rows already in the right place are in order. 
 
 A histogram of the second letter should be made.  This histogram should be on a per letter basic, so for example you could have n histograms for n letters in your keys character set.  The first a histogram of second letters for the first letter ` `, the second a histogram of second letters for the first letter `!` and so forrth.  This histogram can be made during the sort pass or during a separate scan of the data at the start of the histogram call.  Whichever is used is up to the implementer, but doing so inline is slightly faster as it requires fewer passes over the data. 
