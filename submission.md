@@ -1,6 +1,6 @@
 Joule sort Daytona submission
 
-This readme briefly describes my submission for the 2025 Daytona Joulesort competition.  
+This readme briefly describes my submission for the 2025 Daytona Joulesort competition.  Bsort on a Raspbery PI 5 required 47,969 joules, 81% the energy and 40% the cost of the 2023 Daytona Joulesort winner MendSort and 91% the energy and 114% the cost of the 2023 Indy Joulesort winner Arm5. 
 
 Bsort is a unique "inverted radix sort".  It source can be found at [bsort.c](https://github.com/adamdeprince/bsort/blob/master/src/bsort.c).  It is compiled with a C compiler as: `gcc -O3 -march=native bsort.c -o bsort` and for our sort execution we ran bsort as `bsort -a -c 500 -s 12 -k 10` where -s and -c are tuning parameters described in `./bsort --help` that have a minor impact on performance.  Because this code is I/O bound compiler optimizations don't greatly affect run time, but do somewhaet affect CPU power consumption. 
 
@@ -45,9 +45,20 @@ Computing the histogram inline will reduce the number of reads from 2n where n i
 
 # Hardware:
 
-The sort code was run on a Raspberry Pi 5 with 16Gb ram equipted with the Raspberry Pi M.2 HAT equipped with a a Oyen Digital M/2 Series PCIe Gen x4 NVMe SSE of 4Tb in size.  The OS was Ubuntu 25.10.  The boot drive was the stock SD card shipped with the Raspbery and the entirely of the NVMe drive was dedicated to search and formatted as a btrfs filesystem.   It was unused prior to running the initial search, maximizing the number of unused blocks.  The board was enclosed in a "GeekPI" metal case and provided with a stock Raspberry PI cooling fan for the CPU.  The raspberry PI was connected to a generic USB power adapter capable of providing 5V and 5amps as required by the device. 
+The sort code was run on a Raspberry Pi 5 with 16Gb ram equipted with the Raspberry Pi M.2 HAT and a Oyen Digital M/2 Series PCIe Gen x4 NVMe SSE of 4Tb in size.  The OS was Ubuntu 25.10.  The boot drive was the stock SD card shipped with the Raspbery and the entirely of the NVMe drive was dedicated to search and formatted as a btrfs filesystem.   It was unused prior to running the initial search, maximizing the number of unused blocks.  The board was enclosed in a "GeekPI" metal case and provided with a stock Raspberry PI cooling fan for the CPU.  No cooling was provided to the SSD.  The raspberry PI was connected to a generic USB power adapter capable of providing 5V and 5amps as required by the device.  The ambient temperature during the run was 60F.  No hardware tuning parameters were applied; the only software tuning parameter was `ulimit -s 1677721600`.
 
-Power is measured by a [yocto-watt power meter](https://www.yoctopuce.com/EN/products/usb-electrical-sensors/yocto-watt) running the latest firmware, which has the same accuracy as a the BrandElectronics Model 20-1850/CI used in the original Joule Sort. The yocto-watt sensor is resettable and automatically measures power consumption without supervision, so no I/O was necessary during the run. 
+Power is measured by a [yocto-watt power meter](https://www.yoctopuce.com/EN/products/usb-electrical-sensors/yocto-watt) running the latest firmware, which has the same accuracy as a the BrandElectronics Model 20-1850/CI used in the original Joule Sort. The yocto-watt sensor is resettable and automatically measures power consumption without supervision, so no I/O was necessary during the run.  The yocto-watt sensor samples at 10Hz.
+
+```
+Raspberry PI 16Gb:                   $132
+Oygen Digital M/2 NVMe:              $400
+Geek pi case + NMVe adapter and fan:  $50
+800 watt USB charger:                 $80
+240 watt usb cord:                    $17
+yocto-watt power meter               $140
+Total:                               $819
+```
+
 
 # Execution: 
 
@@ -59,6 +70,8 @@ python reset.py # https://github.com/adamdeprince/bsort/blob/master/reset.py
 ssh adam@192.168.1.59  "cd /fast && ulimit -s 1677721600 && time ./bsort -a -c 500 -s 12 -k 10 -i input  output"
 python joules.py # https://github.com/adamdeprince/bsort/blob/master/joules.py
 ```
+
+The input file was created with `gensort -a 10000000000 input` using version 1.2 of gensort. 
 
 # Performance: 
 
@@ -72,7 +85,7 @@ Five passes were run, each taking approximately 6 hours.
 20,899 seconds, 47,599 joules
 ```
 
-The median power consumption was 48,048 joules for a processing performance of 208,125 records per joule. 
+The median runtime was 21,159 seconds.  The mean power consumption was 47,969 joules for a processing performance of 208,464 records per joule. 
 
 The results of valsort are: 
 
