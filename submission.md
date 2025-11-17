@@ -64,11 +64,13 @@ python joules.py # https://github.com/adamdeprince/bsort/blob/master/joules.py
 
 Five passes were run, each taking approximately 6 hours.  
 
+```
 21,597 seconds, 47,548 joules
 20,938 seconds, 48,048 joules
 21,159 seconds, 48,319 joules
 21,265 seconds, 48,335 joules
 20,899 seconds, 47,599 joules
+```
 
 The median power consumption was 48,048 joules for a processing performance of 208,125 records per joule. 
 
