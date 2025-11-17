@@ -74,8 +74,6 @@ Five passes were run, each taking approximately 6 hours.
 
 The median power consumption was 48,048 joules for a processing performance of 208,125 records per joule. 
 
-bsort took 21,597 seconds consuming 47,548 joules, for 210,313 records per joule.
-
 The results of valsort are: 
 
 ```
