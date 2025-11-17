@@ -73,6 +73,23 @@ python joules.py # https://github.com/adamdeprince/bsort/blob/master/joules.py
 
 The input file was created with `gensort -a 10000000000 input` using version 1.2 of gensort. 
 
+Below is a sample run.
+
+```
+input file:input
+read_sort size: 1000000000000
+create_sort 1000000000000
+madvise
+Returning
+
+Processing time: 21265.898 s
+
+real	354m25.959s
+user	90m6.330s
+sys	48m48.018s
+48335.0
+```
+
 # Performance: 
 
 Five passes were run, each taking approximately 6 hours.  
