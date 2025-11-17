@@ -1,5 +1,4 @@
-Joule sort submission
-
+Joule sort Daytona submission
 
 This readme briefly describes my submission for the 2025 Daytona Joulesort competition.  
 
@@ -7,25 +6,27 @@ Bsort is a unique "inverted radix sort" for which the details of operation will 
 
 For the purposes of the Daytona search, the following flags adjust for differing record sizes.
 
-* -a: Specifies the keys are 7-bit ascii.  The sort defaults to 8-bit clean.
-* -r: The record size in bytes.  Defaults to 100
-* -k: The size of the key portion of the record.  Defaults to 10
+* `-a`: Specifies the keys are 7-bit ascii.  The sort defaults to 8-bit clean.
+* `-r`: The record size in bytes.  Defaults to 100
+* `-k`: The size of the key portion of the record.  Defaults to 10
 
-`-s` and `-c` are tuning parameters.  `-s` controls the depth of the relocation stack (to be explained in a future paper) and `-c` controls the threshold sort group size at which the algorithm switches from a radix sort to a shell sort. 
+Tuning parameters: 
+
+* `-s` controls the depth of the relocation stack (to be explained in a future paper)
+* `-c` controls the threshold sort group size at which the algorithm switches from a radix sort to a shell sort. 
 
 The sort code was run on a Raspberry Pi 5 with 16Gb ram equipted with the Raspberry Pi M.2 HAT equipped with a a Oyen Digital M/2 Series PCIe Gen x4 NVMe SSE of 4Tb in size.  The OS was Ubuntu 25.10.  The boot drive was the stock SD card shipped with the Raspbery and the entirely of the NVMe drive was dedicated to search and formatted as a btrfs filesystem.   It was unused prior to running the initial search, maximizing the number of unused blocks.  The board was enclosed in a "GeekPI" metal case and provided with a stock Raspberry PI cooling fan for the CPU.  The raspberry PI was connected to a generic USB power adapter capable of providing 5V and 5amps as required by the device. 
 
 Power is measured by a [yocto-watt power meter](https://www.yoctopuce.com/EN/products/usb-electrical-sensors/yocto-watt) running the latest firmware, which has the same accuracy as a the BrandElectronics Model 20-1850/CI used in the original Joule Sort. The yocto-watt sensor is resetable and automatically measures power consumption without supervision, so no I/O was nessesary during the run. 
 
-Execution was orchastracted by a shell script running on a MacBook Pro M4 Max.  The yocto-watt sensor was connected to the Macbook Pro by usb.   The following script was run five times, rebooting the device between executions to flush data from the backing store.  
+Execution was orchastracted by a shell script running on a MacBook Pro M4 Max.  The yocto-watt sensor was connected to the Macbook Pro by usb.   The following script was run five times, rebooting the device between executions to flush data from the backing store.   
 
 ```bash
 #!/bin/bash
-python [reset.py](https://github.com/adamdeprince/bsort/blob/master/reset.py)
+python reset.py # https://github.com/adamdeprince/bsort/blob/master/reset.py
 ssh adam@192.168.1.59  "cd /fast && ulimit -s 1677721600 && time ./bsort -a -c 500 -s 12 -k 10 -i input  output"
-python joules.py
+python joules.py # https://github.com/adamdeprince/bsort/blob/master/joules.py
 ```
-
 
 
 Five passes were run, each taking approximately 6 hours.  
@@ -38,10 +39,4 @@ Five passes were run, each taking approximately 6 hours.
 
 The median power consumption was 48,048 joules for a processing performance of 208,125 records per joule. 
 
-
-
-
-While the sort was run on a raspberry 5, power meter reading and script launching was the responsibility of a host machine.   A aMacBook pro ran this script to start the yocto-watts power integrator, start the sort script on the raspberry 5, and when complete report on the number of joules consumed.   
-
-
-When run the bsort took 21,597 seconds consuming 47,548 joules, for 210,313 recors per joule.
+bsort took 21,597 seconds consuming 47,548 joules, for 210,313 records per joule.
