@@ -104,6 +104,8 @@ Five passes were run, each taking approximately 6 hours.
 
 The median runtime was 21,159 seconds.  The mean power consumption was 47,969 joules for a processing performance of 208,464 records per joule. 
 
+During execution CPU consumption was approximately 25% of one core, but sampling was limited to occational random sampling minimize power consumption and memory pressure. 
+
 The results of valsort are: 
 
 ```
