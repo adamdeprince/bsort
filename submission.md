@@ -62,7 +62,7 @@ Total:                               $819
 
 # Execution: 
 
-Execution was orchestrated by a shell script running on a MacBook Pro M4 Max.  The yocto-watt sensor was connected to the Macbook Pro by usb.   The following script was run five times, rebooting the device between executions to flush data from the backing store.   
+Execution was orchestrated by a shell script running on a MacBook Pro M4 Max.  The input file was created with `gensort -a 10000000000 input` using version 1.2 of gensort.  The yocto-watt sensor was connected to the Macbook Pro by usb.   The following script was run five times, rebooting the device between executions to flush data from the backing store.   
 
 ```bash
 #!/bin/bash
@@ -71,7 +71,7 @@ ssh adam@192.168.1.59  "cd /fast && ulimit -s 1677721600 && time ./bsort -a -c 5
 python joules.py # https://github.com/adamdeprince/bsort/blob/master/joules.py
 ```
 
-The input file was created with `gensort -a 10000000000 input` using version 1.2 of gensort. 
+
 
 Below is a sample run.
 
