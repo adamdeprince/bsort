@@ -4,7 +4,7 @@ Joule sort Indy submission
 
 By Adam DePrince November 17, 2025
 
-This document describes my submission for the 2025 Daytona Joulesort competition.  Bsort on a Raspbery PI 5 required 47,969 joules, 81% the energy and 40% the cost of the 2023 Daytona Joulesort winner MendSort and 91% the energy and 114% the cost of the 2023 Indy Joulesort winner Arm5. 
+This document describes my submission for the 2025 Indy Joulesort competition.  Bsort on a Raspbery PI 5 required 47,969 joules, 81% the energy and 40% the cost of the 2023 Daytona Joulesort winner MendSort and 91% the energy and 114% the cost of the 2023 Indy Joulesort winner Arm5. 
 
 Bsort is a unique "inverted radix sort".  It source can be found at [bsort.c](https://github.com/adamdeprince/bsort/blob/master/src/bsort.c).  It is compiled with a C compiler as: `gcc -O3 -march=native bsort.c -o bsort` and for our sort execution we ran bsort as `bsort -a -c 500 -s 12 -k 10` where -s and -c are tuning parameters described in `./bsort --help` that have a minor impact on performance.  Because this code is I/O bound compiler optimizations don't greatly affect run time, but do somewhaet affect CPU power consumption. 
 
