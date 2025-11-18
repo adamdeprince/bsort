@@ -1,6 +1,6 @@
 BSORT 
 
-Joule sort Daytona submission
+Joule sort Indy submission
 
 By Adam DePrince November 17, 2025
 
