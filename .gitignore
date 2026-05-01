@@ -1,3 +1,4 @@
+.codex
 *~
 *.o
 Makefile.in
@@ -21,3 +22,10 @@ src/bsortstamp-h1
 *.orig
 stamp-h1
 src/bsort
+build/
+build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
