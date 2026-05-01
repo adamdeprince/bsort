@@ -59,6 +59,7 @@ enum class Allocation {
 struct Options {
   bool verbose = false;
   bool sync_after_sort = false;
+  bool validate_keys = true;
   std::uint16_t char_start = 0;
   std::uint16_t char_stop = 255;
   std::size_t record_size = 100;
@@ -273,10 +274,14 @@ struct Alphabet {
   using Histogram = std::array<std::size_t, padded_stride>;
   using Histograms = std::array<Histogram, width>;
 
+  [[nodiscard]] static std::size_t unchecked_bin_for(const Byte value) {
+    return to_uint8(value) - first;
+  }
+
   [[nodiscard]] static std::size_t bin_for(const Byte value) {
     const std::uint8_t digit = to_uint8(value);
     assert(digit >= first && digit <= last);
-    return digit - first;
+    return unchecked_bin_for(value);
   }
 
   [[nodiscard]] static std::size_t checked_bin_for(const Byte value) {
@@ -287,7 +292,7 @@ struct Alphabet {
             "record contains a key byte outside the configured alphabet");
       }
     }
-    return digit - first;
+    return unchecked_bin_for(value);
   }
 };
 
@@ -368,13 +373,14 @@ void apply_ascii_defaults(Options& options,
 #ifndef BSORT_LIBRARY_ONLY
 void print_usage(const char* program, std::ostream& out) {
   out << "Usage: " << program
-      << " [-v] [-S] [-a] [-r ###] [-k ###] [-s ###] [-c ###] [-t ###]"
+      << " [-v] [-S] [-a] [-V] [-r ###] [-k ###] [-s ###] [-c ###] [-t ###]"
          " [-A mode] [-I advice] [-O advice] [-i infile] [-o outfile] <file>\n"
       << "\n"
       << "Sort fixed-width binary records by their key prefix.\n"
       << "\n"
       << "Sorting options:\n"
       << "  -a        assume printable 7-bit ASCII keys instead of binary keys\n"
+      << "  -V        skip key validation; input keys must match the alphabet\n"
       << "  -k ###    key size in bytes (default 8)\n"
       << "  -r ###    record size in bytes (default 100)\n"
       << "\n"
@@ -411,7 +417,7 @@ void print_usage(const char* program, std::ostream& out) {
   }
 
   int opt = 0;
-  while ((opt = ::getopt(argc, argv, "hSvi:o:aA:I:O:r:k:s:c:t:")) != -1) {
+  while ((opt = ::getopt(argc, argv, "hSvi:o:aVA:I:O:r:k:s:c:t:")) != -1) {
     switch (opt) {
       case 'h':
         print_usage(argv[0], std::cout);
@@ -431,6 +437,9 @@ void print_usage(const char* program, std::ostream& out) {
       case 'a':
         options.char_start = 32;
         options.char_stop = 126;
+        break;
+      case 'V':
+        options.validate_keys = false;
         break;
       case 'A':
         options.output_allocation = parse_allocation(optarg);
@@ -534,7 +543,8 @@ class RecordScratch<0> {
 template <std::size_t FixedRecordSize,
           std::size_t FixedKeySize,
           std::uint16_t CharStart,
-          std::uint16_t CharStop>
+          std::uint16_t CharStop,
+          bool ValidateKeys>
 class RadixSorter {
   using AlphabetT = Alphabet<CharStart, CharStop>;
   using BucketMask = std::array<bool, AlphabetT::width>;
@@ -684,18 +694,20 @@ class RadixSorter {
       const Byte* const base,
       const std::size_t byte_offset,
       const std::size_t digit) const {
-    return AlphabetT::bin_for(base[byte_offset + digit]);
+    return AlphabetT::unchecked_bin_for(base[byte_offset + digit]);
   }
 
   [[nodiscard]] std::size_t validate_key_and_first_bin(
       const Byte* const record) const {
-    if constexpr (FixedRecordSize == 100 && FixedKeySize == 8 &&
-                  CharStart == 32 && CharStop == 126) {
+    if constexpr (!ValidateKeys) {
+      return AlphabetT::unchecked_bin_for(record[0]);
+    } else if constexpr (FixedRecordSize == 100 && FixedKeySize == 8 &&
+                         CharStart == 32 && CharStop == 126) {
       if (!printable_ascii_key8_is_valid(record)) [[unlikely]] {
         throw std::runtime_error(
             "record contains a key byte outside the configured alphabet");
       }
-      return AlphabetT::bin_for(record[0]);
+      return AlphabetT::unchecked_bin_for(record[0]);
     } else if constexpr (AlphabetT::needs_validation) {
       const std::size_t first_bin = AlphabetT::checked_bin_for(record[0]);
       for (std::size_t digit = 1; digit < key_size(); ++digit) {
@@ -703,7 +715,7 @@ class RadixSorter {
       }
       return first_bin;
     } else {
-      return AlphabetT::bin_for(record[0]);
+      return AlphabetT::unchecked_bin_for(record[0]);
     }
   }
 
@@ -1019,6 +1031,7 @@ class RadixSorter {
     options.char_start = 32;
     options.char_stop = 126;
   }
+  options.validate_keys = config.validate_keys;
 
   const bool explicit_stack_size = config.stack_size != 0;
   const bool explicit_cut_off = config.cut_off != 0;
@@ -1076,13 +1089,42 @@ template <std::size_t FixedRecordSize,
           std::size_t FixedKeySize,
           std::uint16_t CharStart,
           std::uint16_t CharStop,
+          bool ValidateKeys,
           typename InputConsumed>
 void sort_memory_typed(const Options& options,
                        const std::span<Byte> output,
                        const std::optional<std::span<const Byte>> input,
                        InputConsumed input_consumed) {
-  RadixSorter<FixedRecordSize, FixedKeySize, CharStart, CharStop> sorter(options);
+  RadixSorter<FixedRecordSize,
+              FixedKeySize,
+              CharStart,
+              CharStop,
+              ValidateKeys> sorter(options);
   sorter.sort(output, input, input_consumed);
+}
+
+template <std::size_t FixedRecordSize,
+          std::size_t FixedKeySize,
+          std::uint16_t CharStart,
+          std::uint16_t CharStop,
+          typename InputConsumed>
+void sort_memory_validated(const Options& options,
+                           const std::span<Byte> output,
+                           const std::optional<std::span<const Byte>> input,
+                           InputConsumed input_consumed) {
+  if (options.validate_keys) {
+    sort_memory_typed<FixedRecordSize,
+                      FixedKeySize,
+                      CharStart,
+                      CharStop,
+                      true>(options, output, input, input_consumed);
+  } else {
+    sort_memory_typed<FixedRecordSize,
+                      FixedKeySize,
+                      CharStart,
+                      CharStop,
+                      false>(options, output, input, input_consumed);
+  }
 }
 
 template <typename InputConsumed>
@@ -1092,23 +1134,23 @@ void sort_memory(const Options& options,
                  InputConsumed input_consumed) {
   if (options.char_start == 32 && options.char_stop == 126) {
     if (options.record_size == 100 && options.key_size == 8) {
-      sort_memory_typed<100, 8, 32, 126>(options,
-                                         output,
-                                         input,
-                                         input_consumed);
+      sort_memory_validated<100, 8, 32, 126>(options,
+                                             output,
+                                             input,
+                                             input_consumed);
       return;
     }
 
-    sort_memory_typed<0, 0, 32, 126>(options, output, input, input_consumed);
+    sort_memory_validated<0, 0, 32, 126>(options, output, input, input_consumed);
     return;
   }
 
   if (options.record_size == 100 && options.key_size == 8) {
-    sort_memory_typed<100, 8, 0, 255>(options, output, input, input_consumed);
+    sort_memory_validated<100, 8, 0, 255>(options, output, input, input_consumed);
     return;
   }
 
-  sort_memory_typed<0, 0, 0, 255>(options, output, input, input_consumed);
+  sort_memory_validated<0, 0, 0, 255>(options, output, input, input_consumed);
 }
 
 #ifndef BSORT_LIBRARY_ONLY
@@ -1122,7 +1164,8 @@ void sort_memory(const Options& options,
 template <std::size_t FixedRecordSize,
           std::size_t FixedKeySize,
           std::uint16_t CharStart,
-          std::uint16_t CharStop>
+          std::uint16_t CharStop,
+          bool ValidateKeys>
 void run_sort_typed(const Options& options) {
   const auto start = std::chrono::steady_clock::now();
 
@@ -1140,7 +1183,11 @@ void run_sort_typed(const Options& options) {
                                                  input.size(),
                                                  options.output_allocation,
                                                  options.output_advice);
-    sort_memory_typed<FixedRecordSize, FixedKeySize, CharStart, CharStop>(
+    sort_memory_typed<FixedRecordSize,
+                      FixedKeySize,
+                      CharStart,
+                      CharStop,
+                      ValidateKeys>(
         options,
         output.bytes(),
         input.bytes(),
@@ -1160,7 +1207,11 @@ void run_sort_typed(const Options& options) {
     MappedFile file = MappedFile::open_existing(path,
                                                 true,
                                                 options.output_advice);
-    sort_memory_typed<FixedRecordSize, FixedKeySize, CharStart, CharStop>(
+    sort_memory_typed<FixedRecordSize,
+                      FixedKeySize,
+                      CharStart,
+                      CharStop,
+                      ValidateKeys>(
         options,
         file.bytes(),
         std::nullopt,
@@ -1176,23 +1227,43 @@ void run_sort_typed(const Options& options) {
   std::cout << "Processing time: " << elapsed.count() << " s\n";
 }
 
+template <std::size_t FixedRecordSize,
+          std::size_t FixedKeySize,
+          std::uint16_t CharStart,
+          std::uint16_t CharStop>
+void run_sort_validated(const Options& options) {
+  if (options.validate_keys) {
+    run_sort_typed<FixedRecordSize,
+                   FixedKeySize,
+                   CharStart,
+                   CharStop,
+                   true>(options);
+  } else {
+    run_sort_typed<FixedRecordSize,
+                   FixedKeySize,
+                   CharStart,
+                   CharStop,
+                   false>(options);
+  }
+}
+
 void run_sort(const Options& options) {
   if (options.char_start == 32 && options.char_stop == 126) {
     if (options.record_size == 100 && options.key_size == 8) {
-      run_sort_typed<100, 8, 32, 126>(options);
+      run_sort_validated<100, 8, 32, 126>(options);
       return;
     }
 
-    run_sort_typed<0, 0, 32, 126>(options);
+    run_sort_validated<0, 0, 32, 126>(options);
     return;
   }
 
   if (options.record_size == 100 && options.key_size == 8) {
-    run_sort_typed<100, 8, 0, 255>(options);
+    run_sort_validated<100, 8, 0, 255>(options);
     return;
   }
 
-  run_sort_typed<0, 0, 0, 255>(options);
+  run_sort_validated<0, 0, 0, 255>(options);
 }
 #endif
 

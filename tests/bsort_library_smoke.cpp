@@ -50,6 +50,18 @@ int main() {
                       test_config);
   expect_equal(in_place, sorted);
 
+  std::array<char, 16> no_validation = unsorted;
+  bsort::sort_records(no_validation.data(),
+                      no_validation.data(),
+                      no_validation.size(),
+                      bsort::SortConfig {
+                          .ascii = true,
+                          .record_size = 4,
+                          .key_size = 2,
+                          .validate_keys = false,
+                      });
+  expect_equal(no_validation, sorted);
+
   std::array<char, 24> overlapping {};
   std::memcpy(overlapping.data(), unsorted.data(), unsorted.size());
   bool rejected_overlap = false;

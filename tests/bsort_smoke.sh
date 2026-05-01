@@ -27,6 +27,10 @@ printf 'b2AAa2BBa1CCb1DD' > "$tmpdir/ascii"
 "$bsort_bin" -a -r 4 -k 2 -t 0 "$tmpdir/ascii" >/dev/null
 cmp "$tmpdir/ascii" "$tmpdir/expected"
 
+printf 'b2AAa2BBa1CCb1DD' > "$tmpdir/ascii-no-validate"
+"$bsort_bin" -a -V -r 4 -k 2 -t 0 "$tmpdir/ascii-no-validate" >/dev/null
+cmp "$tmpdir/ascii-no-validate" "$tmpdir/expected"
+
 printf 'AA\177Z' > "$tmpdir/bad-ascii"
 if "$bsort_bin" -a -r 4 -k 3 "$tmpdir/bad-ascii" >/dev/null 2>&1; then
   exit 1

@@ -12,6 +12,7 @@ struct SortConfig {
   std::size_t stack_size = 0;
   std::size_t cut_off = 0;
   std::optional<std::size_t> std_sort_cleanup_min;
+  bool validate_keys = true;
 };
 
 void sort_records(void* output,

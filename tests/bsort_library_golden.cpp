@@ -68,6 +68,12 @@ int main(int argc, char* argv[]) {
         .record_size = 100,
         .key_size = 8,
     };
+    const bsort::SortConfig no_validation_config {
+        .ascii = true,
+        .record_size = 100,
+        .key_size = 8,
+        .validate_keys = false,
+    };
 
     std::vector<char> copied(input.size());
     bsort::sort_records(copied.data(), input.data(), input.size(), config);
@@ -77,7 +83,7 @@ int main(int argc, char* argv[]) {
     bsort::sort_records(in_place.data(),
                         in_place.data(),
                         in_place.size(),
-                        config);
+                        no_validation_config);
     expect_equal(in_place, expected, "in-place");
 
     return 0;

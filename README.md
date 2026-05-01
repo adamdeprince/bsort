@@ -77,6 +77,7 @@ Important options:
 -r N       record size in bytes; default 100
 -k N       key size in bytes; default 8
 -a         keys are printable ASCII bytes 32..126 inclusive
+-V         skip key validation; input keys must match the selected alphabet
 -s N       push-ahead stack size; default 16, or 8 with -a
 -c N       cleanup-sort cutoff; default 500
 -t N       std::sort cleanup threshold; default 96, or 256 with -a
@@ -130,6 +131,7 @@ struct SortConfig {
   std::size_t stack_size = 0;
   std::size_t cut_off = 0;
   std::optional<std::size_t> std_sort_cleanup_min;
+  bool validate_keys = true;
 };
 
 void sort_records(void* output,
@@ -149,8 +151,13 @@ void sort_records(char* output,
 `record_size`.
 
 If `output == input`, bsort sorts in place and still performs the initial
-histogram/validation pass. If `output` and `input` are distinct overlapping
-memory ranges, the library rejects the call with `std::invalid_argument`.
+histogram pass, including validation when enabled. If `output` and `input` are
+distinct overlapping memory ranges, the library rejects the call with
+`std::invalid_argument`.
+
+Set `validate_keys = false` for trusted inputs when validation is not needed.
+When validation is disabled, every key byte must already be inside the selected
+alphabet; invalid bytes are outside the library contract.
 
 Leaving `stack_size` or `cut_off` as zero uses the library defaults. Leaving
 `std_sort_cleanup_min` unset uses the default threshold.

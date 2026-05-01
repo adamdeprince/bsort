@@ -1,0 +1,163 @@
+bsort optimization notes
+========================
+
+This file summarizes the performance-oriented changes applied during the
+C++23 conversion and tuning pass.
+
+Modern C++ specialization
+-------------------------
+
+- Replaced the old C implementation with a C++23 implementation while keeping
+  the same fixed-width-record radix sort strategy.
+- Added template dispatch for the common 100-byte record / 8-byte key case.
+  This lets the compiler constant-fold record and key sizes in the hottest
+  paths.
+- Kept generic record/key-size support for non-default use cases.
+- Removed the earlier 100-byte record / 20-byte key specialization after the
+  default key size moved back to 8 bytes.
+
+Default workload tuning
+-----------------------
+
+- Changed the default key size from 20 bytes to 8 bytes.
+- Retuned ASCII-mode defaults back to the faster observed values:
+  - stack size: 8
+  - cleanup cutoff: 500
+  - std::sort cleanup threshold: 256
+- Added command-line tuning for the std::sort/shellsort cleanup threshold with
+  `-t`.
+
+ASCII mode
+----------
+
+- Fixed printable ASCII validation to treat 126 as the inclusive upper bound.
+- Reduced ASCII histogram width from a full 256 buckets to the printable ASCII
+  range, 32..126.
+- Padded histogram rows for alignment/cache behavior.
+- Moved ASCII validation out of hot recursive radix loops.
+- Added a SWAR 8-byte printable ASCII validation path for the specialized
+  100-byte record / 8-byte key ASCII case.
+
+Validation placement
+--------------------
+
+- Copy-mode sorting now validates keys, when enabled, while copying input
+  records into the output buffer and building the initial histogram.
+- In-place sorting validates keys, when enabled, while building the initial
+  histogram.
+- Recursive radix passes no longer repeat validation.
+- Validation is controlled by a compile-time sorter template parameter selected
+  once from the CLI/API option. The competition path can use `-V` or
+  `SortConfig::validate_keys = false` to compile validation out of the initial
+  histogram pass.
+
+Histogram reuse and locality
+----------------------------
+
+- Reused next-digit histogram storage across recursive calls instead of
+  allocating fresh buffers repeatedly.
+- Changed ASCII histograms to compact 95-bucket rows with padded stride.
+- Avoided zeroing entire next-digit histogram slabs when only some rows can be
+  used.
+- Skipped next-digit histogram creation entirely when no child bucket is large
+  enough to recurse.
+- Counted next-digit histograms only for buckets that will recurse.
+- Replaced the selected-row clear scan with a compact bucket list, so sparse
+  next-digit histogram reuse clears only rows known to be live.
+
+Radix hot loop
+--------------
+
+- Split the radix permutation loop into templated variants:
+  - no next-digit histogram
+  - full next-digit histogram
+  - row-masked next-digit histogram
+- This avoids repeatedly branching on whether next-histogram tracking is
+  enabled in the common no-next-histogram path.
+- Changed radix permutation cursor storage from record indexes to byte offsets,
+  avoiding repeated `index * record_size` work in the mover.
+- Changed the initial copy/validation passes and shellsort insertion pass to
+  walk pointers or byte offsets instead of repeatedly converting record indexes
+  into byte addresses.
+- Removed unused record-index digit lookup helpers after the offset-based mover
+  made them obsolete.
+- Stopped value-initializing radix offset/end scratch histograms that are fully
+  assigned before use, and removed the separate starts scratch histogram.
+- Hoisted frequently used runtime values such as record size, cutoff, and stack
+  limit into locals.
+- Marked rare validation and consistency failure branches as unlikely.
+
+Record comparison
+-----------------
+
+- Specialized 8-byte key comparison by loading the key as a 64-bit integer and
+  comparing big-endian numeric values.
+- This avoids repeated `memcmp` calls in the common 8-byte-key cleanup paths.
+
+Record movement
+---------------
+
+- Specialized 100-byte record copies using fixed-size compiler-visible memcpy.
+- Native builds emit vectorized copies for the 100-byte copy path.
+- Reused a single record scratch buffer during permutation and shellsort.
+- Changed std::sort cleanup ordering from record indexes to byte offsets,
+  removing repeated index-to-byte multiplication from cleanup comparators and
+  gathering.
+
+Cleanup sorting
+----------------
+
+- Added std::sort-based cleanup for larger leaf buckets to replace shellsort
+  where it is faster.
+- Kept shellsort for smaller buckets.
+- Made the threshold runtime-tunable with `-t`.
+
+I/O and mapping
+---------------
+
+- Added `-A truncate|fallocate` to compare output allocation strategies.
+- Added `-I` and `-O` madvise controls:
+  - normal
+  - random
+  - sequential
+  - willneed
+- Fixed the sequential advice implementation so it uses `POSIX_MADV_SEQUENTIAL`
+  directly instead of accidentally OR-ing advice constants into `WILLNEED`.
+- Unmapped the input file immediately after the initial copy/validation pass in
+  copy-mode sorting.
+- Benchmarks on the tested workload favored truncate allocation and sequential
+  advice, so those remain the defaults.
+
+Library/API path
+----------------
+
+- Added a C++ library API, `bsort::sort_records`, so callers can sort memory
+  blocks without going through the executable or file mapping path.
+- The library detects in-place use when input and output pointers are equal and
+  skips the copy while still building the initial histogram.
+- Distinct overlapping input/output ranges are rejected.
+- The executable now reuses the same core sorting implementation as the library.
+
+Build-system options
+--------------------
+
+- Added CMake support for Release builds.
+- Added `BSORT_NATIVE` for local `-march=native` builds.
+- Added `BSORT_LTO` for CMake IPO/LTO.
+- Added GCC PGO controls:
+  - `BSORT_PGO=generate`
+  - `BSORT_PGO=use`
+  - `BSORT_PGO_DIR=...`
+- Benchmarks on the tested system did not justify enabling LTO or PGO by
+  default.
+
+Testing
+-------
+
+- Added smoke tests for the executable.
+- Added library tests for copy-mode sorting, in-place sorting, overlap
+  rejection, and ASCII validation.
+- Added a golden library test using the moved `tests/data/input` and
+  `tests/data/output` fixtures.
+- Added a package-consumer test for the installed CMake target
+  `bsort::bsort`.
