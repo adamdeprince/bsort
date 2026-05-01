@@ -282,7 +282,7 @@ struct Alphabet {
   [[nodiscard]] static std::size_t checked_bin_for(const Byte value) {
     const std::uint8_t digit = to_uint8(value);
     if constexpr (needs_validation) {
-      if (digit < first || digit > last) {
+      if (digit < first || digit > last) [[unlikely]] {
         throw std::runtime_error(
             "record contains a key byte outside the configured alphabet");
       }
@@ -538,6 +538,7 @@ template <std::size_t FixedRecordSize,
 class RadixSorter {
   using AlphabetT = Alphabet<CharStart, CharStop>;
   using BucketMask = std::array<bool, AlphabetT::width>;
+  using BucketList = std::array<std::uint16_t, AlphabetT::width>;
   using Histogram = typename AlphabetT::Histogram;
   using Histograms = typename AlphabetT::Histograms;
 
@@ -557,11 +558,11 @@ class RadixSorter {
   void sort(const std::span<Byte> output,
             const std::optional<std::span<const Byte>> input,
             InputConsumed input_consumed) {
-    if (output.size() % record_size() != 0) {
+    if (output.size() % record_size() != 0) [[unlikely]] {
       throw std::invalid_argument("file size is not a multiple of record size");
     }
 
-    if (input.has_value() && input->size() != output.size()) {
+    if (input.has_value() && input->size() != output.size()) [[unlikely]] {
       throw std::invalid_argument("input and output sizes differ");
     }
 
@@ -598,16 +599,6 @@ class RadixSorter {
     } else {
       return options_.key_size;
     }
-  }
-
-  [[nodiscard]] Byte* record_at(Byte* const base,
-                                const std::size_t record_index) const {
-    return base + (record_index * record_size());
-  }
-
-  [[nodiscard]] const Byte* record_at(const Byte* const base,
-                                      const std::size_t record_index) const {
-    return base + (record_index * record_size());
   }
 
   [[nodiscard]] Byte* record_at_offset(Byte* const base,
@@ -689,18 +680,6 @@ class RadixSorter {
     return compare_keys(left, right) < 0;
   }
 
-  [[nodiscard]] std::uint8_t digit_at(const Byte* const base,
-                                      const std::size_t record_index,
-                                      const std::size_t digit) const {
-    return to_uint8(record_at(base, record_index)[digit]);
-  }
-
-  [[nodiscard]] std::size_t digit_bin_at(const Byte* const base,
-                                         const std::size_t record_index,
-                                         const std::size_t digit) const {
-    return AlphabetT::bin_for(record_at(base, record_index)[digit]);
-  }
-
   [[nodiscard]] std::size_t digit_bin_at_offset(
       const Byte* const base,
       const std::size_t byte_offset,
@@ -712,18 +691,15 @@ class RadixSorter {
       const Byte* const record) const {
     if constexpr (FixedRecordSize == 100 && FixedKeySize == 8 &&
                   CharStart == 32 && CharStop == 126) {
-      if (!printable_ascii_key8_is_valid(record)) {
+      if (!printable_ascii_key8_is_valid(record)) [[unlikely]] {
         throw std::runtime_error(
             "record contains a key byte outside the configured alphabet");
       }
       return AlphabetT::bin_for(record[0]);
     } else if constexpr (AlphabetT::needs_validation) {
-      std::size_t first_bin = 0;
-      for (std::size_t digit = 0; digit < key_size(); ++digit) {
-        const std::size_t bin = AlphabetT::checked_bin_for(record[digit]);
-        if (digit == 0) {
-          first_bin = bin;
-        }
+      const std::size_t first_bin = AlphabetT::checked_bin_for(record[0]);
+      for (std::size_t digit = 1; digit < key_size(); ++digit) {
+        (void)AlphabetT::checked_bin_for(record[digit]);
       }
       return first_bin;
     } else {
@@ -733,7 +709,7 @@ class RadixSorter {
 
   [[nodiscard]] Histograms& next_histograms_for(
       const std::size_t digit,
-      const BucketMask& rows_to_clear,
+      const BucketList& rows_to_clear,
       const std::size_t rows_to_clear_count) {
     auto& histograms = next_histograms_[digit];
     if (!histograms) {
@@ -743,10 +719,9 @@ class RadixSorter {
     if (rows_to_clear_count == AlphabetT::width) {
       std::memset(histograms.get(), 0, sizeof(Histograms));
     } else {
-      for (std::size_t bucket = 0; bucket < AlphabetT::width; ++bucket) {
-        if (rows_to_clear[bucket]) {
-          std::memset((*histograms)[bucket].data(), 0, sizeof(Histogram));
-        }
+      for (std::size_t row = 0; row < rows_to_clear_count; ++row) {
+        const std::size_t bucket = rows_to_clear[row];
+        std::memset((*histograms)[bucket].data(), 0, sizeof(Histogram));
       }
     }
     return *histograms;
@@ -756,20 +731,26 @@ class RadixSorter {
                                         const std::span<const Byte> input,
                                         Histogram& histogram) const {
     const std::size_t record_count = output.size() / record_size();
+    const std::size_t record_bytes = record_size();
+    const Byte* source = input.data();
+    Byte* destination = output.data();
     for (std::size_t index = 0; index < record_count; ++index) {
-      const Byte* const source = record_at(input.data(), index);
-      Byte* const destination = record_at(output.data(), index);
       const std::size_t first_digit = validate_key_and_first_bin(source);
       ++histogram[first_digit];
       copy_record(destination, source);
+      source += record_bytes;
+      destination += record_bytes;
     }
   }
 
   void validate_and_count_first_digit(const Byte* const buffer,
                                       const std::size_t count,
                                       Histogram& histogram) const {
+    const std::size_t record_bytes = record_size();
+    const Byte* record = buffer;
     for (std::size_t index = 0; index < count; ++index) {
-      ++histogram[validate_key_and_first_bin(record_at(buffer, index))];
+      ++histogram[validate_key_and_first_bin(record)];
+      record += record_bytes;
     }
   }
 
@@ -820,19 +801,23 @@ class RadixSorter {
   void insertion_pass(Byte* const buffer,
                       const std::size_t count,
                       const std::size_t gap) {
-    for (std::size_t index = gap; index < count; ++index) {
-      copy_record(record_scratch_.data(), record_at(buffer, index));
+    const std::size_t record_bytes = record_size();
+    const std::size_t gap_bytes = gap * record_bytes;
+    const std::size_t total_bytes = count * record_bytes;
+    for (std::size_t offset = gap_bytes; offset < total_bytes;
+         offset += record_bytes) {
+      copy_record(record_scratch_.data(), record_at_offset(buffer, offset));
 
-      std::size_t current = index;
-      while (current >= gap &&
-             compare_keys(record_at(buffer, current - gap),
+      std::size_t current = offset;
+      while (current >= gap_bytes &&
+             compare_keys(record_at_offset(buffer, current - gap_bytes),
                           record_scratch_.data()) > 0) {
-        copy_record(record_at(buffer, current),
-                    record_at(buffer, current - gap));
-        current -= gap;
+        copy_record(record_at_offset(buffer, current),
+                    record_at_offset(buffer, current - gap_bytes));
+        current -= gap_bytes;
       }
 
-      copy_record(record_at(buffer, current), record_scratch_.data());
+      copy_record(record_at_offset(buffer, current), record_scratch_.data());
     }
   }
 
@@ -930,10 +915,10 @@ class RadixSorter {
     const std::size_t stack_limit = options_.stack_size;
     const bool has_next_digit = digit + 1 < key_size();
 
-    Histogram offsets {};
-    Histogram starts {};
-    Histogram ends {};
+    Histogram offsets;
+    Histogram ends;
     BucketMask bucket_needs_next_histogram {};
+    BucketList next_histogram_buckets;
 
     std::size_t records_seen = 0;
     std::size_t byte_offset = 0;
@@ -941,25 +926,26 @@ class RadixSorter {
     for (std::size_t bucket = 0; bucket < AlphabetT::width; ++bucket) {
       const std::size_t bucket_size = histogram[bucket];
       offsets[bucket] = byte_offset;
-      starts[bucket] = byte_offset;
       byte_offset += bucket_size * record_bytes;
       ends[bucket] = byte_offset;
       records_seen += bucket_size;
 
       if (has_next_digit && bucket_size > cut_off) {
         bucket_needs_next_histogram[bucket] = true;
+        next_histogram_buckets[next_histogram_rows] =
+            static_cast<std::uint16_t>(bucket);
         ++next_histogram_rows;
       }
     }
 
-    if (records_seen != count) {
+    if (records_seen != count) [[unlikely]] {
       throw std::runtime_error("histogram does not match the record count");
     }
 
     Histograms* const next_histogram =
         next_histogram_rows != 0
             ? &next_histograms_for(digit,
-                                    bucket_needs_next_histogram,
+                                    next_histogram_buckets,
                                     next_histogram_rows)
             : nullptr;
 
@@ -996,15 +982,17 @@ class RadixSorter {
       return;
     }
 
-    for (std::size_t bucket_index = 0;
-         bucket_index < AlphabetT::width;
+    std::size_t bucket_start = 0;
+    for (std::size_t bucket_index = 0; bucket_index < AlphabetT::width;
          ++bucket_index) {
       const std::size_t bucket_size = histogram[bucket_index];
+      Byte* const bucket = record_at_offset(buffer, bucket_start);
+      bucket_start = ends[bucket_index];
+
       if (bucket_size <= 1) {
         continue;
       }
 
-      Byte* const bucket = record_at_offset(buffer, starts[bucket_index]);
       if (bucket_size > cut_off) {
         assert(next_histogram != nullptr);
         radixify(bucket, bucket_size, digit + 1, (*next_histogram)[bucket_index]);
