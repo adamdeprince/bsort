@@ -38,7 +38,17 @@ namespace {
 #define BSORT_STD_SORT_CLEANUP_MIN 96
 #endif
 
+#ifndef BSORT_USE_KEYED_CLEANUP
+#define BSORT_USE_KEYED_CLEANUP 1
+#endif
+
+#ifndef BSORT_KEYED_SHELLSORT_MIN
+#define BSORT_KEYED_SHELLSORT_MIN 32
+#endif
+
 constexpr bool use_std_sort_cleanup = BSORT_USE_STD_SORT_CLEANUP != 0;
+constexpr bool use_keyed_cleanup = BSORT_USE_KEYED_CLEANUP != 0;
+constexpr std::size_t keyed_shellsort_min = BSORT_KEYED_SHELLSORT_MIN;
 constexpr std::size_t default_std_sort_cleanup_min =
     BSORT_STD_SORT_CLEANUP_MIN;
 
@@ -540,6 +550,11 @@ class RecordScratch<0> {
   std::vector<Byte> bytes_;
 };
 
+struct KeyOffset {
+  std::uint64_t key = 0;
+  std::size_t offset = 0;
+};
+
 template <std::size_t FixedRecordSize,
           std::size_t FixedKeySize,
           std::uint16_t CharStart,
@@ -767,11 +782,25 @@ class RadixSorter {
   }
 
   void shellsort(Byte* const buffer, const std::size_t count) {
+    if constexpr (keyed_shellsort_min != 0 && FixedRecordSize == 100 &&
+                  FixedKeySize == 8) {
+      if (count >= keyed_shellsort_min) {
+        shellsort_keyed_100x8(buffer, count);
+        return;
+      }
+    }
+
     insertion_pass(buffer, count, 3);
     insertion_pass(buffer, count, 1);
   }
 
   void std_sort_cleanup(Byte* const buffer, const std::size_t count) {
+    if constexpr (use_keyed_cleanup && FixedRecordSize == 100 &&
+                  FixedKeySize == 8) {
+      std_sort_cleanup_keyed_100x8(buffer, count);
+      return;
+    }
+
     cleanup_order_.resize(count);
     const std::size_t record_bytes = record_size();
     std::size_t record_offset = 0;
@@ -796,6 +825,72 @@ class RadixSorter {
       destination += record_bytes;
     }
     std::memcpy(buffer, cleanup_buffer_.data(), bytes);
+  }
+
+  void std_sort_cleanup_keyed_100x8(Byte* const buffer,
+                                    const std::size_t count) {
+    cleanup_key_order_.resize(count);
+    std::size_t record_offset = 0;
+    for (KeyOffset& order_entry : cleanup_key_order_) {
+      order_entry.key = load_big_endian_u64(record_at_offset(buffer,
+                                                             record_offset));
+      order_entry.offset = record_offset;
+      record_offset += 100;
+    }
+
+    std::sort(cleanup_key_order_.begin(),
+              cleanup_key_order_.end(),
+              [](const KeyOffset& left, const KeyOffset& right) {
+                return left.key < right.key;
+              });
+
+    const std::size_t bytes = count * std::size_t {100};
+    cleanup_buffer_.resize(bytes);
+    Byte* destination = cleanup_buffer_.data();
+    for (const KeyOffset& source : cleanup_key_order_) {
+      copy_record(destination, record_at_offset(buffer, source.offset));
+      destination += 100;
+    }
+    std::memcpy(buffer, cleanup_buffer_.data(), bytes);
+  }
+
+  void shellsort_keyed_100x8(Byte* const buffer, const std::size_t count) {
+    cleanup_key_order_.resize(count);
+    std::size_t record_offset = 0;
+    for (KeyOffset& order_entry : cleanup_key_order_) {
+      order_entry.key = load_big_endian_u64(record_at_offset(buffer,
+                                                             record_offset));
+      order_entry.offset = record_offset;
+      record_offset += 100;
+    }
+
+    keyed_insertion_pass(cleanup_key_order_, 3);
+    keyed_insertion_pass(cleanup_key_order_, 1);
+
+    const std::size_t bytes = count * std::size_t {100};
+    cleanup_buffer_.resize(bytes);
+    Byte* destination = cleanup_buffer_.data();
+    for (const KeyOffset& source : cleanup_key_order_) {
+      copy_record(destination, record_at_offset(buffer, source.offset));
+      destination += 100;
+    }
+    std::memcpy(buffer, cleanup_buffer_.data(), bytes);
+  }
+
+  static void keyed_insertion_pass(std::vector<KeyOffset>& entries,
+                                   const std::size_t gap) {
+    const std::size_t count = entries.size();
+    for (std::size_t index = gap; index < count; ++index) {
+      const KeyOffset current_entry = entries[index];
+
+      std::size_t current = index;
+      while (current >= gap && entries[current - gap].key > current_entry.key) {
+        entries[current] = entries[current - gap];
+        current -= gap;
+      }
+
+      entries[current] = current_entry;
+    }
   }
 
   void cleanup_sort(Byte* const buffer, const std::size_t count) {
@@ -1019,6 +1114,7 @@ class RadixSorter {
   std::vector<std::size_t> position_stack_;
   std::vector<std::unique_ptr<Histograms>> next_histograms_;
   std::vector<std::size_t> cleanup_order_;
+  std::vector<KeyOffset> cleanup_key_order_;
   std::vector<Byte> cleanup_buffer_;
 };
 

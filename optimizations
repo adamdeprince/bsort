@@ -109,6 +109,12 @@ Cleanup sorting
 
 - Added std::sort-based cleanup for larger leaf buckets to replace shellsort
   where it is faster.
+- Added a specialized 100-byte record / 8-byte key cleanup order buffer that
+  caches each 64-bit key next to its record offset before std::sort. This avoids
+  reloading key bytes from the record buffer on every cleanup comparator call.
+- Added keyed shellsort for 100-byte record / 8-byte key leaf buckets at 32
+  records and larger. It sorts cached key/offset entries and gathers records
+  once, avoiding repeated 100-byte record shifts in medium shellsort leaves.
 - Kept shellsort for smaller buckets.
 - Made the threshold runtime-tunable with `-t`.
 
